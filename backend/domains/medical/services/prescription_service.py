@@ -8,7 +8,8 @@ from domains.infrastructure.services.pdf_service import html_template_to_pdf, ge
 from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
 from domains.infrastructure.services.pdf_fields import (
-    apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
+    apply_letterhead, document_doctor_lines, page_css, resolve_field_visibility,
+    resolve_letterhead,
 )
 from domains.infrastructure.services.r2_storage import upload_pdf_to_r2, StorageCategory
 from models import PatientDocument, Patient, Clinic, Prescription as PrescriptionModel
@@ -105,11 +106,24 @@ class PrescriptionService:
             or (getattr(clinic, 'doctor_qualifications', '') or '')
         ) if (vis.doctor_qualifications and c_doctor) else ''
 
-        quals_html = (f'<div class="doc-quals" style="font-size:9.5px;font-weight:700;'
-                      f'color:#6B7280;letter-spacing:.2px;margin-top:1px;">{c_quals}</div>'
-                      if c_quals else '')
-        doctor_name_html  = (f'<div class="doc-name">{c_doctor}</div>{quals_html}'
-                             if c_doctor else '')
+        def _quals_html(quals):
+            return (f'<div class="doc-quals" style="font-size:9.5px;font-weight:700;'
+                    f'color:#6B7280;letter-spacing:.2px;margin-top:1px;">{quals}</div>'
+                    if quals else '')
+
+        quals_html = _quals_html(c_quals)
+
+        # Who the header names. A clinic that has listed its doctors in Control
+        # Center gets all of them, in the order it typed them; every clinic that
+        # has not gets the single doctor resolved above, exactly as before.
+        # The signature block below is untouched either way — it answers a
+        # different question ("who saw this patient today") and the treating
+        # doctor stays on it even when the panel names five people.
+        header_doctors = document_doctor_lines(clinic, vis, c_doctor, c_quals)
+        doctor_name_html = ''.join(
+            f'<div class="doc-name">{d.name}</div>{_quals_html(d.qualifications)}'
+            for d in header_doctors
+        )
         clinic_address_html = f'<p>{c_address}</p>'                    if c_address else ''
         clinic_phone_html   = f'<p>Tel: {c_phone}</p>'                 if c_phone   else ''
         clinic_email_html   = f'<p>Email: {c_email}</p>'               if c_email   else ''
@@ -196,7 +210,10 @@ class PrescriptionService:
             clinical_notes_html = ''
 
         # Build advice block
-        if advice_lines:
+        # The clinic can switch this whole block off (Templates -> Visible
+        # Fields). A practice that writes its advice on the medicine lines
+        # themselves does not want a second heading underneath repeating it.
+        if advice_lines and vis.instructions_section:
             items_html = ''.join(f'<li>{a}</li>' for a in advice_lines if a)
             advice_html = (
                 f'<div class="advice-section">'
@@ -205,6 +222,9 @@ class PrescriptionService:
                 f'</div>'
             )
         else:
+            # Kept as an empty div rather than dropped: two variants lay the
+            # footer out against it, and removing the element moves the
+            # signature block up the page.
             advice_html = '<div class="advice-section"></div>'
 
         # Follow-up line
@@ -222,13 +242,20 @@ class PrescriptionService:
         # ── Medication rows ───────────────────────────────────────────────────
         items_html = ''
         for idx, item in enumerate(prescription_data.items, 1):
-            # item.notes is used as "Instructions" (e.g., "After meals")
+            # item.notes is the composition, printed in brackets after the name.
             composition_html = (
                 f'<span class="med-composition">({item.notes})</span>'
                 if item.notes else ''
             )
-            instructions = ''  # notes already shown as composition; qty as instructions fallback
-            if item.quantity:
+            # The last column is headed "Instructions" and used to print the
+            # QUANTITY into it. So "After food" — the one thing a doctor writes
+            # on every line, and the whole reason the field exists — never
+            # reached the page, while a stray "15" sat under a heading that
+            # promised advice. Instructions first, quantity only as a fallback
+            # for a line that has none, which is what the on-screen print view
+            # has always done.
+            instructions = (getattr(item, 'instructions', '') or '').strip()
+            if not instructions and item.quantity:
                 instructions = str(item.quantity)
 
             items_html += f"""
@@ -466,6 +493,10 @@ class PrescriptionService:
                     duration=raw.get('duration') or '',
                     quantity=raw.get('quantity') or '',
                     notes=raw.get('notes') or '',
+                    # Left out until now, which is half of why "After food"
+                    # never reached a printed prescription: even once the
+                    # renderer looked for it, this path never carried it.
+                    instructions=raw.get('instructions') or '',
                 ))
             else:
                 items.append(raw)

@@ -44,6 +44,10 @@ FIELD_KEYS = (
     'computer_generated_note',  # the "this is a computer generated..." line
     'clinic_name',     # the clinic's own name in the document header
     'doctor_qualifications',  # the letters under the doctor's name (BDS, MDS)
+    # Prescription only: the "Instructions / Advice" block under the medicines.
+    # A clinic that writes its advice on the medicine lines themselves does not
+    # want an empty heading sitting under the table.
+    'instructions_section',
 )
 
 
@@ -66,6 +70,7 @@ class FieldVisibility:
     computer_generated_note: bool = True
     clinic_name: bool = True
     doctor_qualifications: bool = True
+    instructions_section: bool = True
 
 
 ALL_VISIBLE = FieldVisibility()
@@ -330,3 +335,110 @@ def page_css(letterhead: Letterhead, default_margin: str = '2mm',
     """
     margin = letterhead.page_margin_css if letterhead.enabled else default_margin
     return f"@page {{ size: {size}; margin: {margin}; }}"
+
+
+# ─── The doctors named on a document ─────────────────────────────────────────
+#
+# A single-handed practice prints one name. Plenty of clinics are not that: two
+# partners and a visiting orthodontist, all three named across the top of the
+# pad, and the bill carrying the same three. Until now every renderer resolved
+# exactly one doctor — the one treating this patient today — so those clinics
+# had a letterhead our documents could not reproduce.
+#
+# Stored on the CLINIC rather than in `config_json`, deliberately. Who practises
+# here is a fact about the clinic, not a styling choice about one document type,
+# and putting it in the per-category config would mean three copies of the same
+# list that drift the first time somebody edits only the invoice tab.
+#
+# Same rule as everything else in this module: **empty means unchanged**. A
+# clinic that never fills this in keeps the exact single-doctor header it has
+# always had, which is what the golden documents assert.
+
+from domains.infrastructure.services.pdf_safety import safe_text
+
+MAX_DOCUMENT_DOCTORS = 8
+_MAX_DOCTOR_NAME = 120
+_MAX_DOCTOR_QUALS = 120
+
+
+@dataclass(frozen=True)
+class DocumentDoctor:
+    """One name to print, with the letters that go under it.
+
+    Both fields are already HTML-escaped: a renderer interpolates them straight
+    into markup, the same contract as everything `_common.prepare` hands out.
+    """
+    name: str
+    qualifications: str = ''
+
+
+def sanitize_document_doctors(raw):
+    """Normalise a client-supplied doctor list into the stored shape.
+
+    Whitelisted and capped for the same reason `sanitize_visibility` is: this is
+    clinic-writable JSON on a row the renderers read on every document, and an
+    unbounded blob there is an unbounded blob on every page.
+
+    A row with no name is dropped rather than stored — a blank line in the
+    letterhead is not something anybody asked for, and it would print as a gap.
+    Returns None when nothing survives, so "never configured" stays distinct
+    from "configured empty" only in intent, not in outcome: both render the
+    single-doctor header.
+    """
+    if not isinstance(raw, list):
+        return None
+    cleaned = []
+    for entry in raw[:MAX_DOCUMENT_DOCTORS]:
+        if isinstance(entry, str):
+            entry = {'name': entry}
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get('name') or '').strip()[:_MAX_DOCTOR_NAME]
+        if not name:
+            continue
+        quals = str(entry.get('qualifications') or '').strip()[:_MAX_DOCTOR_QUALS]
+        cleaned.append({'name': name, 'qualifications': quals})
+    return cleaned or None
+
+
+def resolve_document_doctors(clinic):
+    """The clinic's configured panel, escaped and ready to interpolate.
+
+    Anything malformed resolves to empty, which falls the renderer back to the
+    single treating doctor it resolved before this existed.
+    """
+    raw = getattr(clinic, 'document_doctors', None) if clinic is not None else None
+    cleaned = sanitize_document_doctors(raw) or []
+    return tuple(
+        DocumentDoctor(safe_text(d['name']), safe_text(d['qualifications']))
+        for d in cleaned
+    )
+
+
+def document_doctor_lines(clinic, vis, fallback_name: str = '',
+                          fallback_quals: str = '') -> tuple:
+    """Who the document header names, in order.
+
+    The clinic's panel when it has one, otherwise the single doctor the renderer
+    already resolved — which is every clinic that has not opened this setting.
+
+    The panel replaces the header name rather than joining it: a letterhead
+    lists the practice's doctors, and repeating today's treating doctor at the
+    top of that list would name one of them twice. Who actually saw the patient
+    is answered by the signature block, which this does not touch.
+
+    `fallback_name` and `fallback_quals` arrive already gated by the caller's
+    own visibility flags; re-checking them here costs nothing and means a
+    renderer that forgets cannot print a hidden name.
+    """
+    if not vis.doctor_name:
+        return ()
+    panel = resolve_document_doctors(clinic)
+    if panel:
+        return panel if vis.doctor_qualifications else tuple(
+            replace(d, qualifications='') for d in panel
+        )
+    if not fallback_name:
+        return ()
+    return (DocumentDoctor(
+        fallback_name, fallback_quals if vis.doctor_qualifications else ''),)

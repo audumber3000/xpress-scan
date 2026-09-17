@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Save, FileText, Stethoscope, ClipboardCheck, X, Eye,
   ChevronDown, ChevronUp, Loader2, Check, LayoutTemplate, ExternalLink, Printer,
-  AlertTriangle,
+  AlertTriangle, Plus, Trash2, Users,
 } from 'lucide-react';
 import { notify } from '../../utils/notify';
 import { api } from '../../utils/api';
@@ -22,7 +22,7 @@ const ALL_SHOWN = {
   tagline: true, footer: true, signature: true, discount: true,
   logo: true, doctor_name: true, patient_contact: true,
   patient_age_gender: true, amount_in_words: true, computer_generated_note: true,
-  clinic_name: true, doctor_qualifications: true,
+  clinic_name: true, doctor_qualifications: true, instructions_section: true,
 };
 
 // Printing onto the clinic's own headed paper. Off unless they say otherwise —
@@ -79,7 +79,15 @@ const FIELD_ROWS = [
   { key: 'patient_age_gender', label: 'Patient age & sex', hint: 'The age / sex line under the name' },
   { key: 'amount_in_words', label: 'Amount in words',   hint: '"Rupees four thousand only"', only: ['invoice'] },
   { key: 'computer_generated_note', label: 'Computer-generated note', hint: 'The "does not require a signature" line', only: ['invoice'] },
+  // The block under the medicines, not the per-medicine column. The column is
+  // part of the table and always prints what the doctor wrote on the line.
+  { key: 'instructions_section', label: 'Instructions / Advice section', hint: 'The advice block under the medicine table', only: ['prescription'] },
 ];
+
+// How many names the letterhead will carry. Matches the server's cap
+// (pdf_fields.MAX_DOCUMENT_DOCTORS) — past a handful it stops being a
+// letterhead and starts being a staff list.
+const MAX_DOCTORS = 8;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small UI primitives
@@ -144,6 +152,12 @@ const TemplatesEditor = () => {
   const [variants, setVariants] = useState({ invoice: [], prescription: [], consent: [] });
   const [taxLabel, setTaxLabel] = useState('GST No.'); // clinic's country-specific tax label
   const [clinic, setClinic] = useState(null);
+  // The doctors named across the top of every document. Stored on the CLINIC,
+  // not in this screen's per-category config: who practises here is one answer,
+  // and keeping three copies of it — one per tab — is how the invoice ends up
+  // naming a partner the prescription has never heard of.
+  const [doctors, setDoctors] = useState([]);
+  const [doctorsDirty, setDoctorsDirty] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [zoomVariant, setZoomVariant] = useState(null); // variant being viewed full-size
 
@@ -184,6 +198,8 @@ const TemplatesEditor = () => {
       if (me) {
         setClinic(me);
         if (me.tax_label) setTaxLabel(me.tax_label);
+        setDoctors(Array.isArray(me.document_doctors) ? me.document_doctors : []);
+        setDoctorsDirty(false);
       }
       (configList || []).forEach((c) => {
         const k = c.category;
@@ -239,6 +255,9 @@ const TemplatesEditor = () => {
   // deps rule verify this instead of being told to ignore it.
   const showKey = JSON.stringify(cfg.show ?? {});
   const letterheadKey = JSON.stringify(cfg.letterhead ?? {});
+  // Same trick for the doctor list: it is rebuilt on every keystroke, so its
+  // serialised form is what the preview actually depends on.
+  const doctorsKey = JSON.stringify(doctors);
   useEffect(() => {
     if (loading) return;
     let cancelled = false;
@@ -252,6 +271,9 @@ const TemplatesEditor = () => {
           footer_text: cfg.footer_text,
           logo_url: cfg.logo_url || null,
           config_json: { show: JSON.parse(showKey), letterhead: JSON.parse(letterheadKey) },
+          // Lives on the clinic, so it rides alongside config_json rather than
+          // inside it — the preview needs it before it has been saved.
+          document_doctors: JSON.parse(doctorsKey),
         });
         if (!cancelled && data?.html) {
           setPreviewHtml(data.html);
@@ -268,7 +290,7 @@ const TemplatesEditor = () => {
     }, 350);
     return () => { cancelled = true; clearTimeout(handle); };
   }, [activeTab, cfg.template_id, cfg.primary_color, cfg.footer_text, cfg.logo_url,
-      showKey, letterheadKey, loading]);
+      showKey, letterheadKey, doctorsKey, loading]);
 
   // ── Mutators ────────────────────────────────────────────────────────────────
   const updateField = (field, value) => {
@@ -280,6 +302,23 @@ const TemplatesEditor = () => {
       ...prev,
       [activeTab]: { ...prev[activeTab], show: { ...prev[activeTab].show, [key]: !prev[activeTab].show[key] } },
     }));
+  };
+
+  const setDoctor = (i, field, value) => {
+    setDoctorsDirty(true);
+    setDoctors((prev) => prev.map((d, idx) => (idx === i ? { ...d, [field]: value } : d)));
+  };
+
+  const addDoctor = () => {
+    setDoctorsDirty(true);
+    setDoctors((prev) => (prev.length >= MAX_DOCTORS
+      ? prev
+      : [...prev, { name: '', qualifications: '' }]));
+  };
+
+  const removeDoctor = (i) => {
+    setDoctorsDirty(true);
+    setDoctors((prev) => prev.filter((_, idx) => idx !== i));
   };
 
   const handleSave = async () => {
@@ -295,6 +334,20 @@ const TemplatesEditor = () => {
         footer_text:   cfg.footer_text,
         config_json:   { show: cfg.show, letterhead: cfg.letterhead },
       });
+      // The doctor panel belongs to the clinic, so it is saved to the clinic —
+      // once, not once per tab. Only when it changed: a PUT on every colour
+      // tweak would write a clinic audit line for something nobody touched.
+      // A row with no name is dropped rather than stored; the server does the
+      // same, and a blank line in a letterhead prints as a gap.
+      if (doctorsDirty) {
+        const cleaned = doctors
+          .map((d) => ({ name: (d.name || '').trim(), qualifications: (d.qualifications || '').trim() }))
+          .filter((d) => d.name);
+        const saved = await api.put('/clinics/me', { document_doctors: cleaned });
+        setDoctors(Array.isArray(saved?.document_doctors) ? saved.document_doctors : cleaned);
+        setDoctorsDirty(false);
+      }
+
       // The old code also PATCHed /clinics/me here to mirror the GST number.
       // That route doesn't exist — it 405'd into a swallowed catch, so the GST
       // field never actually saved. GST is edited in Clinic Details; this
@@ -456,6 +509,94 @@ const TemplatesEditor = () => {
                       </div>
                     </div>
                   </div>
+                </Section>
+
+                {/* Who the letterhead names.
+                    Every document resolved exactly one doctor — whoever treated
+                    the patient that day — so a two-partner practice had a
+                    letterhead we could not reproduce. This is the panel, and it
+                    is the clinic's, not this tab's: the same names print on the
+                    invoice, the prescription and the consent form. */}
+                <Section title="Doctors on your documents" defaultOpen={false}>
+                  <p className="text-xs text-gray-500 -mt-1">
+                    The names printed at the top of your invoices, prescriptions and
+                    consent forms. Leave this empty and each document names the doctor
+                    who treated that patient, which is what happens today.
+                  </p>
+
+                  {doctors.length === 0 ? (
+                    <div className="flex items-start gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-3 py-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-gray-400">
+                        <Users size={15} />
+                      </div>
+                      <p className="text-xs leading-snug text-gray-500">
+                        No doctors listed. Add one for every name you want across the
+                        top of the page, in the order they should appear.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {doctors.map((d, i) => (
+                        <div key={i} className="rounded-lg border border-gray-200 bg-white p-2.5">
+                          <div className="flex items-start gap-2">
+                            <span className="mt-2 w-3 shrink-0 text-center text-[11px] font-bold text-gray-300 select-none">
+                              {i + 1}
+                            </span>
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                              <input
+                                type="text"
+                                value={d.name || ''}
+                                onChange={(e) => setDoctor(i, 'name', e.target.value)}
+                                placeholder="Dr Anita Rao"
+                                maxLength={120}
+                                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-gray-900 outline-none focus:border-[#29828a] focus:ring-1 focus:ring-[#29828a]"
+                              />
+                              <input
+                                type="text"
+                                value={d.qualifications || ''}
+                                onChange={(e) => setDoctor(i, 'qualifications', e.target.value)}
+                                placeholder="BDS, MDS (Orthodontics)"
+                                maxLength={120}
+                                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-600 outline-none focus:border-[#29828a] focus:ring-1 focus:ring-[#29828a]"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeDoctor(i)}
+                              title="Remove this doctor"
+                              aria-label={`Remove doctor ${i + 1}`}
+                              className="mt-1 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={addDoctor}
+                    disabled={doctors.length >= MAX_DOCTORS}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-[#29828a] transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <Plus size={13} strokeWidth={2.5} />
+                    {doctors.length >= MAX_DOCTORS ? `Limit is ${MAX_DOCTORS} names` : 'Add a doctor'}
+                  </button>
+
+                  {/* The panel is printed through the same switch as the single
+                      name, so turning that off hides it. Said here rather than
+                      left to be discovered on a wasted sheet of paper. */}
+                  {doctors.length > 0 && cfg.show?.doctor_name === false && (
+                    <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] leading-snug text-amber-800">
+                      <AlertTriangle size={13} className="mt-px shrink-0" />
+                      <span>
+                        &ldquo;Doctor&rsquo;s name&rdquo; is unticked below, so none of these
+                        will print on the {activeTab}.
+                      </span>
+                    </p>
+                  )}
                 </Section>
 
                 <Section title="Visible Fields">

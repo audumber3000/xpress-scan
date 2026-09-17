@@ -57,6 +57,7 @@ import TemplatesEditor from "./pages/admin/TemplatesEditor";
 import Integrations from "./pages/admin/integrations";
 import Activity from "./pages/admin/security/Activity";
 import Security from "./pages/admin/security/Security";
+import Backup from "./pages/admin/security/Backup";
 import Offers from "./pages/admin/Offers";
 import Insurers from "./pages/admin/Insurers";
 import Medications from "./pages/admin/Medications";
@@ -376,6 +377,8 @@ function AppContent() {
                 <Route path="security" element={<Navigate to="verification" replace />} />
                 <Route path="security/verification" element={<Security />} />
                 <Route path="security/activity" element={<Activity />} />
+                {/* Owner-only on the server; the menu shows it to owners only too. */}
+                <Route path="security/backup" element={<OwnerOnlyRoute><Backup /></OwnerOnlyRoute>} />
                 {/* Retired menu items, live routes: each opens Access &
                     Activity on the tab it used to be its own page. */}
                 <Route path="security/devices" element={<Activity />} />

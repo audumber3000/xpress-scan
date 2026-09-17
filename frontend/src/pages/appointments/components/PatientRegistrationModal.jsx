@@ -79,13 +79,12 @@ const PatientRegistrationModal = ({ open, form, setForm, treatments, onSubmit, o
               {/* Village/City */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Village/City *
+                  Village/City
                 </label>
                 <input
                   type="text"
                   value={form.village}
                   onChange={(e) => setForm({ ...form, village: e.target.value })}
-                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent"
                   placeholder="Enter village or city"
                 />

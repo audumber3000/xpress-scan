@@ -10,7 +10,7 @@ from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional, Any
 from pydantic import BaseModel
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 router = APIRouter(prefix="/case-papers", tags=["case-papers"])
@@ -46,6 +46,13 @@ def create_case_paper(
     """Create a new clinical case paper for a patient visit."""
     # Serialize lists to JSON strings for Text columns
     data = case_paper.model_dump(exclude={"clinic_id"})
+
+    # Same normalisation as the update path: the browser sends the visit date
+    # with a Z, and this column stores naive UTC like every other timestamp here.
+    when = data.get('date')
+    if when is not None and when.tzinfo is not None:
+        data['date'] = when.astimezone(timezone.utc).replace(tzinfo=None)
+
     if isinstance(data.get('chief_complaint'), list):
         data['chief_complaint'] = json.dumps(data['chief_complaint'])
     if isinstance(data.get('dental_history'), list):
@@ -78,11 +85,17 @@ def create_case_paper(
         reg_clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
         reg_patient = db.query(Patient).filter(Patient.id == db_paper.patient_id).first()
         if reg_clinic and reg_patient:
+            from core.clinic_time import clinic_day_of
             record_daily_visit(
                 db, reg_clinic, reg_patient,
                 source='case_paper',
                 doctor_id=db_paper.dentist_id,
                 created_by=current_user.id,
+                # The day of the VISIT, not the day it was typed up. Now that
+                # the date is editable, a paper file entered in September for a
+                # visit in June would otherwise put that patient in today's
+                # register and today's footfall.
+                visit_date=clinic_day_of(reg_clinic, db_paper.date),
             )
     except Exception as e:
         print(f"⚠️ Could not add case paper {db_paper.id} to the daily register: {e}")
@@ -160,6 +173,57 @@ def _sync_fee(db, paper, actor_id):
         pass
 
 
+def _move_register_entry(db, paper, old_when, new_when):
+    """Follow a back-dated case paper with its entry in the daily register.
+
+    Creating a case paper puts the patient into that day's register, because a
+    case paper is proof they were here. Now that the date is editable, a paper
+    saved today and then corrected to a visit in June would leave that patient
+    sitting in TODAY's register and today's footfall — a number the clinic reads
+    every evening, wrong because somebody typed up an old file.
+
+    Deliberately narrow. It moves ONE row, and only one that this flow created
+    (`source='case_paper'`) on the day the paper used to carry. A row the front
+    desk entered by hand is theirs, carries their own reason and doctor, and is
+    not something a clinical edit gets to relocate. It also refuses when the
+    patient already has an entry on the new day, because the register holds one
+    row per patient per day and merging two is not a decision to make silently.
+
+    Best-effort, like the register write it mirrors: a clinical record must save
+    whether or not a reporting row could follow it.
+    """
+    try:
+        from core.clinic_time import clinic_day_of
+        from models import DailyVisit
+
+        clinic = db.query(Clinic).filter(Clinic.id == paper.clinic_id).first()
+        if not clinic:
+            return
+        old_day = clinic_day_of(clinic, old_when)
+        new_day = clinic_day_of(clinic, new_when)
+        if not old_day or not new_day or old_day == new_day:
+            return
+
+        taken = db.query(DailyVisit.id).filter(
+            DailyVisit.clinic_id == paper.clinic_id,
+            DailyVisit.patient_id == paper.patient_id,
+            DailyVisit.visit_date == new_day,
+        ).first()
+        if taken:
+            return
+
+        entry = db.query(DailyVisit).filter(
+            DailyVisit.clinic_id == paper.clinic_id,
+            DailyVisit.patient_id == paper.patient_id,
+            DailyVisit.visit_date == old_day,
+            DailyVisit.source == 'case_paper',
+        ).first()
+        if entry:
+            entry.visit_date = new_day
+    except Exception as e:  # noqa: BLE001
+        print(f"⚠️ Could not move the register entry for case paper {paper.id}: {e}")
+
+
 @router.put("/{paper_id}", response_model=CasePaperOut)
 def update_case_paper(
     paper_id: int,
@@ -177,16 +241,32 @@ def update_case_paper(
         raise HTTPException(status_code=404, detail="Case paper not found")
         
     update_data = case_paper_update.model_dump(exclude_unset=True)
-    
+
+    # The visit date is editable, and the browser sends it with a Z. Every
+    # timestamp in this database is naive UTC, so an offset-aware value is
+    # converted rather than handed to the column as it arrived — a column that
+    # holds both kinds is a column nothing can compare.
+    when = update_data.get('date')
+    if when is not None and when.tzinfo is not None:
+        update_data['date'] = when.astimezone(timezone.utc).replace(tzinfo=None)
+
     # Serialize lists to JSON strings for Text columns
     if 'chief_complaint' in update_data and isinstance(update_data['chief_complaint'], list):
         update_data['chief_complaint'] = json.dumps(update_data['chief_complaint'])
     if 'dental_history' in update_data and isinstance(update_data['dental_history'], list):
         update_data['dental_history'] = json.dumps(update_data['dental_history'])
         
+    # Held before the write, so the register move below knows which day to look
+    # on. Read off the row rather than from the request: a save that does not
+    # touch the date must not look like one that moved it.
+    previous_date = db_paper.date
+
     for key, value in update_data.items():
         setattr(db_paper, key, value)
-        
+
+    if 'date' in update_data:
+        _move_register_entry(db, db_paper, previous_date, db_paper.date)
+
     db_paper.updated_at = datetime.utcnow()
 
     # The treating doctor may have just been set or changed, so the fee owed

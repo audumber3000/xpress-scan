@@ -4,7 +4,7 @@ import SetupProgress from '../components/admin/SetupProgress';
 import { api } from '../utils/api';
 import { useHeader } from '../contexts/HeaderContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Users, FileText, Bell, CreditCard, SlidersHorizontal, ChevronDown, Stethoscope, Shield, History, Plug, Tag, Pill, AlertTriangle, ShieldCheck} from 'lucide-react';
+import { Building2, Users, FileText, Bell, CreditCard, SlidersHorizontal, ChevronDown, Stethoscope, Shield, History, Plug, Tag, Pill, AlertTriangle, ShieldCheck, DatabaseBackup} from 'lucide-react';
 import { planLabel } from '../utils/plans';
 
 /**
@@ -73,6 +73,9 @@ const NAV_GROUPS = [
       // "who can get in" and "what they did" are read together, and splitting
       // them meant leaving the screen halfway through looking something up.
       { id: 'security_activity', icon: History, label: 'Access & Activity', path: '/admin/security/activity' },
+      // "What happens to my records if something happens to you" is the same
+      // worry as "who can get in", so it lives here rather than off on its own.
+      { id: 'security_backup', icon: DatabaseBackup, label: 'Backup & Data', path: '/admin/security/backup', ownerOnly: true },
     ],
   },
   {
@@ -257,7 +260,10 @@ const AdminHub = () => {
                 </p>
               )}
 
-              {group.items.map((item) => (
+              {/* `ownerOnly` rows are hidden from staff rather than shown and
+                  then bounced: the route sends a non-owner back to the
+                  dashboard, which from a menu reads as the app malfunctioning. */}
+              {group.items.filter((item) => !item.ownerOnly || user?.role === 'clinic_owner').map((item) => (
                 <React.Fragment key={item.id}>
                   <SidebarItem
                     id={item.id}

@@ -17,6 +17,7 @@ import datetime
 
 from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text
 from domains.finance.invoice_templates._common import qualifications_line
+from domains.infrastructure.services.pdf_fields import document_doctor_lines
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
 from domains.infrastructure.services.pdf_fields import (
     apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
@@ -134,11 +135,27 @@ def render_invoice(invoice, clinic, config=None) -> str:
     </div>''' if vis.signature else ''
     )
 
-    who_line = ' · '.join(filter(None, [doctor_name, c_tagline, c_address]))
-    # Not joined into `who_line`: that row is a single run of grey text, and
-    # the letters are meant to sit under the name rather than beside the
-    # address separated by a middot.
-    quals_html = qualifications_line(doctor_qualifications)
+    # Who the letterhead names. A clinic that has listed its doctors in Control
+    # Center gets all of them; one that has not gets the single doctor resolved
+    # above, and this line renders exactly as it always has.
+    panel = document_doctor_lines(clinic, vis, doctor_name, doctor_qualifications)
+    if len(panel) > 1:
+        # Several names cannot each carry their own line of letters beneath a
+        # row that is one run of grey text, so the letters go inline after each
+        # name instead.
+        doctors_bit = ' · '.join(
+            f'{d.name}, {d.qualifications}' if d.qualifications else d.name
+            for d in panel
+        )
+        quals_html = ''
+    else:
+        doctors_bit = panel[0].name if panel else ''
+        # Not joined into `who_line`: that row is a single run of grey text, and
+        # the letters are meant to sit under the name rather than beside the
+        # address separated by a middot.
+        quals_html = qualifications_line(panel[0].qualifications) if panel else ''
+
+    who_line = ' · '.join(filter(None, [doctors_bit, c_tagline, c_address]))
     contact_line = '  ·  '.join(filter(None, [
         f'Tel: {c_phone}' if c_phone else '', c_email,
     ]))

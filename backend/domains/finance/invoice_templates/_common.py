@@ -22,7 +22,8 @@ from domains.infrastructure.services.pdf_safety import (
 )
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
 from domains.infrastructure.services.pdf_fields import (
-    apply_letterhead, resolve_field_visibility, resolve_letterhead,
+    apply_letterhead, document_doctor_lines, resolve_field_visibility,
+    resolve_letterhead,
 )
 
 
@@ -185,6 +186,24 @@ def qualifications_line(quals: str, size: str = '9.5px', color: str = '#6B7280')
         return ''
     return (f'<div style="font-size:{size};font-weight:700;color:{color};'
             f'letter-spacing:.2px;margin-top:1px;">{quals}</div>')
+
+
+def header_doctor_html(clinic, vis, name: str, quals: str, wrap) -> str:
+    """The doctors named in the document header, rendered this layout's way.
+
+    A clinic that has listed its doctors in Control Center gets all of them; one
+    that has not gets the single doctor the caller already resolved, which is
+    every clinic today. `wrap(name, quals_html)` is the layout's own markup for
+    one entry, so this decides WHO is named and the variant decides how.
+
+    Header only. The signature block still names whoever actually treated the
+    patient — a letterhead listing five partners does not mean five people
+    signed the bill.
+    """
+    return ''.join(
+        wrap(d.name, qualifications_line(d.qualifications))
+        for d in document_doctor_lines(clinic, vis, name, quals)
+    )
 
 
 def tax_rows(d, label_cls: str = '', value_cls: str = '') -> str:

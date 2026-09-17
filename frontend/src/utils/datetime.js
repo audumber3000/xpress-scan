@@ -102,3 +102,65 @@ export function formatRelative(value) {
   else relative = `${Math.floor(days / 365)}y ago`;
   return { relative, exact: formatDateTime(value) };
 }
+
+// ─── Editing a timestamp, in the clinic's timezone ──────────────────────────
+//
+// Reading a time is one direction; typing one is the other, and it is the one
+// that goes wrong silently. A <input type="date"> plus <input type="time"> hand
+// back the clinic's wall clock, and `new Date("2026-04-12T15:30")` reads that
+// as the BROWSER's wall clock — so a receptionist in Dubai back-dating a visit
+// for a Mumbai clinic would store it 90 minutes out and nothing would say so.
+
+// How far the timezone is from UTC at a given instant, in minutes. Derived by
+// formatting the instant in that zone and reading the answer back, which is the
+// only way to get it without shipping a timezone database.
+function tzOffsetMinutes(instant, timeZone) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(instant).map((p) => [p.type, p.value])
+  );
+  const asIfUTC = Date.UTC(
+    +parts.year, +parts.month - 1, +parts.day,
+    +parts.hour % 24, +parts.minute, +parts.second
+  );
+  // Seconds resolution: the formatter has no milliseconds, so the instant is
+  // floored to match before the two are subtracted.
+  return (asIfUTC - Math.floor(instant.getTime() / 1000) * 1000) / 60000;
+}
+
+/** A server timestamp split into the two values a date + time input want. */
+export function clinicInputParts(value) {
+  const d = parseServerDate(value);
+  if (!d) return { date: '', time: '' };
+  const tz = getClinicTimezone();
+  return {
+    date: d.toLocaleDateString('en-CA', { timeZone: tz }),
+    time: d.toLocaleTimeString('en-GB', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+    }),
+  };
+}
+
+/**
+ * The reverse: a clinic-local date and time back into a UTC ISO string.
+ *
+ * The offset is resolved twice on purpose. The first pass uses the offset at
+ * roughly the right instant; on the two days a year a zone changes offset that
+ * can land on the wrong side of the switch, and the second pass corrects it.
+ * India never does this, but the app runs in ~160 countries that do.
+ */
+export function clinicPartsToServer(dateStr, timeStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const [hh, mm] = String(timeStr || '00:00').split(':').map(Number);
+  if (!y || !m || !d || Number.isNaN(hh) || Number.isNaN(mm)) return null;
+  const tz = getClinicTimezone();
+  const wallClock = Date.UTC(y, m - 1, d, hh, mm, 0);
+  let instant = wallClock - tzOffsetMinutes(new Date(wallClock), tz) * 60000;
+  const settled = tzOffsetMinutes(new Date(instant), tz);
+  instant = wallClock - settled * 60000;
+  return new Date(instant).toISOString();
+}

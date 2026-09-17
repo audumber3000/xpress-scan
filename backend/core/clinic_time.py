@@ -33,6 +33,25 @@ def clinic_today(clinic):
     return clinic_now(clinic).date()
 
 
+def clinic_day_of(clinic, moment):
+    """Which of the clinic's calendar days a stored UTC timestamp falls on.
+
+    The reverse of `clinic_day_bounds_utc`, and needed as soon as a timestamp
+    can be back-dated: a case paper written for 9 pm on the 3rd is UTC the 3rd
+    in India and UTC the 4th nowhere that matters, but a clinic in Auckland
+    would have had it land on the wrong day of its own register.
+
+    Naive values are read as UTC, which is how every timestamp in this database
+    is stored. Returns None for anything unusable, so a caller can fall back to
+    "today" rather than guess.
+    """
+    if moment is None:
+        return None
+    if getattr(moment, "tzinfo", None) is None:
+        moment = moment.replace(tzinfo=ZoneInfo("UTC"))
+    return moment.astimezone(clinic_tzinfo(clinic)).date()
+
+
 def clinic_day_bounds_utc(clinic, d_from=None, d_to=None):
     """Convert a clinic-local date range into naive UTC datetime bounds.
 

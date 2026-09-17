@@ -10,6 +10,7 @@ import DentalChartSection from './DentalChartSection';
 import CaseWorkPanel from './caseWork';
 import ClinicalSummaryModal from './ClinicalSummaryModal';
 import CasePaperActionBar from './CasePaperActionBar';
+import CasePaperDateField from './CasePaperDateField';
 import InvoiceEditor from '../payments/InvoiceEditor';
 import CasePaperInvoicesPanel from './CasePaperInvoicesPanel';
 import NextVisitModal from './NextVisitModal';
@@ -17,10 +18,11 @@ import { notify } from '../../utils/notify';
 import { api } from "../../utils/api";
 import { universalToFDI } from "../../utils/toothNumbering";
 import { deriveStatus, formatSurfaces } from './dentalConstants';
-import { Clock, ChevronLeft, Activity } from 'lucide-react';
+import { ChevronLeft, Activity } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigationGuard } from '../../contexts/NavigationGuardContext';
 import { getUserDisplayName } from '../../utils/userName';
+import { formatDate } from '../../utils/datetime';
 import { useCasePaperLabels } from '../../utils/casePaper';
 import DermClinicalSections from './derm/DermClinicalSections';
 import { useToothSelection } from './useToothSelection';
@@ -127,6 +129,10 @@ const CasePapersTab = ({
 
   // Active form state for the current case paper session
   const [form, setForm] = useState({
+      // When the visit happened. Lives on the form rather than being stamped at
+      // save time, because it is editable: a paper file entered months later is
+      // not a visit that happened today, and the save used to insist it was.
+      date: new Date().toISOString(),
       chief_complaint: [],
       medical_history: [],
       dental_history: [],
@@ -164,6 +170,7 @@ const CasePapersTab = ({
     };
     setSelectedCasePaper(paper);
     setForm({
+      date: paper.date || new Date().toISOString(),
       chief_complaint: pills(paper.chief_complaint),
       medical_history: pills(paper.medical_history),
       dental_history: pills(paper.dental_history),
@@ -341,7 +348,6 @@ const CasePapersTab = ({
       ...form,
       patient_id: patientData.id,
       clinic_id: patientData.clinic_id,
-      date: new Date().toISOString(),
       status: 'In Progress',
       dental_chart_snapshot: sessionTeethData,
       treatment_plan_snapshot: sessionTreatmentPlan,
@@ -501,7 +507,7 @@ const CasePapersTab = ({
     })();
 
     const ok = window.confirm(
-      `Delete this case paper?\n\n"${title}" — ${new Date(paper.date).toLocaleDateString()}\n\n` +
+      `Delete this case paper?\n\n"${title}" — ${formatDate(paper.date)}\n\n` +
       'This permanently removes the clinical record and cannot be undone.'
     );
     if (!ok) return;
@@ -524,6 +530,7 @@ const CasePapersTab = ({
           isNew: true
       };
       setForm({
+          date: newPaper.date,
           chief_complaint: [],
           medical_history: [],
           dental_history: [],
@@ -572,7 +579,9 @@ const CasePapersTab = ({
               ...form,
               patient_id: patientData.id,
               clinic_id: patientData.clinic_id, // Ensure clinic_id is sent
-              date: new Date().toISOString(),
+              // `date` comes from the form, which is spread in above. It used to
+              // be stamped here with the current time on EVERY save, so editing
+              // a three-week-old case paper silently moved it to today.
               status: 'Completed',
               // Clinical Snapshots
               dental_chart_snapshot: sessionTeethData,
@@ -600,6 +609,7 @@ const CasePapersTab = ({
           setDirty(false);
           setSelectedCasePaper(null);
           setForm({
+              date: new Date().toISOString(),
               chief_complaint: [],
               medical_history: [],
               dental_history: [],
@@ -1008,12 +1018,7 @@ const CasePapersTab = ({
         loading={loading}
         onNewCasePaper={startNewCasePaper}
         onDeleteCasePaper={handleDeleteCasePaper}
-        onSelectCasePaper={(paper, formData) => {
-          setSelectedCasePaper(paper);
-          setForm(formData);
-          setDirty(false);
-          onCasePaperStateChange?.(true);
-        }}
+        onSelectCasePaper={openCasePaper}
       />
     );
   }
@@ -1041,10 +1046,10 @@ const CasePapersTab = ({
                         {selectedCasePaper.status}
                     </span>
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                    <Clock size={12} className="text-gray-400" />
-                    <span className="text-xs font-bold text-gray-500">{new Date(selectedCasePaper.date).toLocaleDateString()} at {new Date(selectedCasePaper.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                </div>
+                <CasePaperDateField
+                    value={form.date || selectedCasePaper.date}
+                    onChange={(iso) => handleFormChange({ ...form, date: iso })}
+                />
                 <div className="text-xs font-semibold text-gray-500 mt-1">
                   {patientData?.name || 'Patient'}{patientData?.age ? ` • ${patientData.age}y` : ''}
                 </div>

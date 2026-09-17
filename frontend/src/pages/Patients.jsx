@@ -511,9 +511,10 @@ const Patients = () => {
       errors.registered_on = "Registration date can't be in the future.";
     }
 
-    // Stored as `village`; the label says Address because that is what a
-    // receptionist is looking at when they type it.
-    if (!editFormData.village?.trim()) errors.village = "Address is required.";
+    // Address (stored as `village`) is NOT a gate, for the same reason treatment
+    // type and referred-by stopped being one: a walk-in gives their name and a
+    // number, and a required box they cannot answer gets a guess typed into it.
+    // A blank address is honest; "n/a" in a thousand rows is not.
     // Treatment type and referred-by are no longer gates. A receptionist taking
     // a walk-in often knows neither, and a required field they cannot answer
     // gets filled with a guess, which is worse than the default we would have
@@ -1384,7 +1385,7 @@ const Patients = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                   <input
                     type="text"
                     placeholder="Village, town or area"

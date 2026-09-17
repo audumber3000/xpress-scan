@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pencil, Trash2, Clock, Stethoscope, CalendarClock, ClipboardList, Plus } from 'lucide-react';
 import { nextVisitSummary, NOT_SPECIFIED } from '../../utils/nextVisit';
+import { clinicDateKey, clinicToday, formatDate, formatTime, parseServerDate } from '../../utils/datetime';
 
 /**
  * What a dentist is actually asking when they open this list:
@@ -15,19 +16,16 @@ import { nextVisitSummary, NOT_SPECIFIED } from '../../utils/nextVisit';
  * rest without opening the paper.
  */
 
-const isSameDay = (a, b) =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
-
 const timeOf = (paper) => {
-  // `date` is the visit date and is sometimes date-only, so the real clock time
-  // lives on created_at. Fall back rather than print a misleading midnight.
-  const src = paper.created_at || paper.date;
-  if (!src) return null;
-  const d = new Date(src);
-  if (Number.isNaN(d.getTime()) || (d.getHours() === 0 && d.getMinutes() === 0)) return null;
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // `date` is the visit date, and since it became editable it is the only
+  // honest answer: a paper back-dated to last month was still CREATED today,
+  // so reading created_at would print the hour somebody typed it up. Kept the
+  // midnight guard for rows whose date was only ever a calendar day — printing
+  // "at 12:00 am" against those says something nobody recorded.
+  const d = parseServerDate(paper.date);
+  if (!d) return null;
+  const t = formatTime(paper.date);
+  return t === '12:00 am' ? null : t;
 };
 
 const planCount = (paper) => {
@@ -83,21 +81,13 @@ const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {caseHistory.map((paper, index) => {
-            const openPaper = () => {
-              onSelectCasePaper(paper, {
-                chief_complaint: parsePills(paper.chief_complaint),
-                medical_history: parsePills(paper.medical_history),
-                dental_history: parsePills(paper.dental_history),
-                allergies: parsePills(paper.allergies),
-                clinical_examination: paper.clinical_examination || '',
-                diagnosis: paper.diagnosis || '',
-                next_visit_recommendation: paper.next_visit_recommendation || NOT_SPECIFIED,
-                next_visit_date: paper.next_visit_date || null,
-                notes: paper.notes || ''
-              });
-            };
-            const when = new Date(paper.date);
-            const today = isSameDay(when, new Date());
+            // Hands back the paper, not a form built from it. This used to
+            // assemble the form itself, one field short — dermatology findings
+            // were never copied in, so opening a skin case paper from here and
+            // saving it wiped them. The screen that owns the form builds it.
+            const openPaper = () => onSelectCasePaper(paper);
+            // "Today" in the clinic's timezone, not the viewer's.
+            const today = clinicDateKey(paper.date) === clinicToday();
             const open = paper.status !== 'Completed';
             const time = timeOf(paper);
             const treatments = planCount(paper);
@@ -171,7 +161,7 @@ const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper
                 <div className="flex items-center gap-1.5">
                   <Clock size={12} className="flex-shrink-0 text-gray-400" />
                   <span>
-                    {when.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {formatDate(paper.date)}
                     {time && <span className="text-gray-400"> at {time}</span>}
                   </span>
                 </div>

@@ -123,7 +123,6 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
     // Both are YYYY-MM-DD, so a string compare is a date compare.
     else if (form.registered_on > clinicToday()) e.registered_on = "Registration date can't be in the future.";
 
-    if (!form.village?.trim()) e.village = "Address is required.";
     if (!form.treatment_type?.trim()) e.treatment_type = "Treatment type is required.";
     if (!form.referred_by?.trim()) e.referred_by = "Referred by is required.";
     return e;
@@ -313,7 +312,7 @@ const PatientEditModal = ({ open, patient, onClose, onSaved }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address <span className="text-red-500">*</span>
+                  Address
                 </label>
                 <input type="text" value={form.village} onChange={(e) => setField("village", e.target.value)} className={fieldClass("village")} />
                 <FieldError name="village" />

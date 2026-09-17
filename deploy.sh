@@ -306,6 +306,14 @@ run_migration "consent_signed_ip"    "ALTER TABLE patient_consents ADD COLUMN IF
 run_migration "consent_signed_agent" "ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS signed_user_agent VARCHAR(400)"
 run_migration "consent_pdf_sha"      "ALTER TABLE patient_consents ADD COLUMN IF NOT EXISTS pdf_sha256 VARCHAR(64)"
 
+# ── The doctors named on a clinic's documents ────────────────────────────────
+# A two-partner practice has a letterhead our renderers could not reproduce:
+# each resolved exactly one doctor, whoever treated the patient that day. JSON
+# rather than a table because it is a short ordered list the clinic types, not
+# something anything joins on. NULL on every clinic that has not set one up,
+# which is what keeps their documents printing exactly as they do today.
+run_migration "clinic_document_doctors" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS document_doctors JSON"
+
 # ── One-shot data migrations ────────────────────────────────────────────────
 # Everything above is idempotent DDL that can safely run on every deploy. The
 # two below CHANGE DATA, and re-running them would undo decisions clinics made
@@ -358,7 +366,7 @@ while IFS='|' read -r table required_cols; do
     fi
   done
 done <<'REQUIRED_COLUMNS'
-clinics|id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id master_password_hash master_password_updated_at master_password_attempts master_password_locked_until case_paper_type
+clinics|id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id master_password_hash master_password_updated_at master_password_attempts master_password_locked_until case_paper_type document_doctors
 users|id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed
 user_clinics|user_id clinic_id role is_active created_at
 patients|id clinic_id name phone date_of_birth registered_on allergies created_at updated_at

@@ -27,6 +27,8 @@ STAFF_UPDATED        = 'staff.updated'
 STAFF_DEACTIVATED    = 'staff.deactivated'
 PERMISSIONS_CHANGED  = 'permissions.changed'
 CLINIC_UPDATED       = 'clinic.updated'
+# A full copy of the practice's records leaving the building.
+CLINIC_EXPORTED      = 'clinic.exported'
 TEMPLATE_UPDATED     = 'template.updated'
 DEVICE_BLOCKED       = 'device.blocked'
 DEVICE_REMOVED       = 'device.removed'
@@ -65,6 +67,7 @@ ACTION_LABELS = {
     STAFF_DEACTIVATED:   'Staff deactivated',
     PERMISSIONS_CHANGED: 'Permissions changed',
     CLINIC_UPDATED:      'Clinic settings changed',
+    CLINIC_EXPORTED:     'Data backup downloaded',
     TEMPLATE_UPDATED:    'Document template changed',
     DEVICE_BLOCKED:      'Device blocked',
     DEVICE_REMOVED:      'Device removed',

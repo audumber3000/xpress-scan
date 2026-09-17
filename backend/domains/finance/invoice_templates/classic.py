@@ -7,7 +7,7 @@ deliberate redesign, not a drift.
 import datetime
 
 from domains.infrastructure.services.pdf_safety import safe_color, safe_signature_data_uri, safe_text
-from domains.finance.invoice_templates._common import qualifications_line
+from domains.finance.invoice_templates._common import header_doctor_html, qualifications_line
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
 from domains.infrastructure.services.pdf_fields import (
     apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
@@ -136,6 +136,16 @@ def render_invoice(invoice, clinic, config=None) -> str:
         p_age = p_gender = ''
     if not vis.logo:
         logo_html = ''
+
+    # Who the letterhead names. The clinic's own list when it has one, the
+    # doctor resolved above when it does not — so a clinic that has never
+    # opened the setting renders exactly as it did before, which is what the
+    # golden document asserts.
+    doctor_header = header_doctor_html(
+        clinic, vis, doctor_name, doctor_qualifications,
+        lambda n, q: f'<div class="doc-name">{n}</div>{q}',
+    )
+
     # Dates
     created_at   = getattr(invoice, 'created_at', None)
     invoice_date = created_at.strftime('%d %B %Y') if created_at else datetime.date.today().strftime('%d %B %Y')
@@ -162,6 +172,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
         c_address=c_address, c_tagline=c_tagline,
         c_reg=c_reg, c_gst=c_gst, doctor_name=doctor_name,
         doctor_qualifications=doctor_qualifications,
+        doctor_header=doctor_header,
         doctor_signature=doctor_signature,
         status_label=status_label,
         p_name=p_name, p_phone=p_phone,
@@ -182,6 +193,7 @@ def _render_indian_tax(
     c_reg, c_gst, doctor_name, doctor_qualifications, status_label,
     p_name, p_phone, p_age, p_gender, p_uhid,
     invoice_date, subtotal, total, inv_tax, discount, taxable,
+    doctor_header=None,
     doctor_signature='', currency='₹', tax_label='GST No.', is_india=True,
     vis=None, letterhead=None,
 ):
@@ -278,8 +290,11 @@ def _render_indian_tax(
         {left_inner}
       </div>""" if (logo_cell or left_inner) else '')
 
-    doc_html = (f'<div class="doc-name">{doctor_name}</div>'
-                + qualifications_line(doctor_qualifications)) if doctor_name else ''
+    # Prepared by the caller, which knows the clinic. Falls back to the single
+    # name for any caller that predates the doctor panel.
+    doc_html = doctor_header if doctor_header is not None else (
+        (f'<div class="doc-name">{doctor_name}</div>'
+         + qualifications_line(doctor_qualifications)) if doctor_name else '')
     addr_html = f'<p>{c_address}</p>' if c_address else ''
     tel_html = f'<p>Tel: {c_phone}</p>' if c_phone else ''
     email_html = f'<p>Email: {c_email}</p>' if c_email else ''

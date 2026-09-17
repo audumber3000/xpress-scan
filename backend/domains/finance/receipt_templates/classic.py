@@ -20,7 +20,9 @@ from domains.infrastructure.services.pdf_safety import (
     safe_color, safe_signature_data_uri, safe_text,
 )
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
-from domains.infrastructure.services.pdf_fields import resolve_field_visibility
+from domains.infrastructure.services.pdf_fields import (
+    resolve_document_doctors, resolve_field_visibility,
+)
 from domains.finance.invoice_templates.classic import _amount_in_words
 
 
@@ -82,6 +84,16 @@ def render_receipt(invoice, payment, clinic, config=None) -> str:
                 doctor_signature = safe_signature_data_uri(getattr(doc, 'signature_url', None))
     except Exception:
         pass
+
+    # Who the letterhead names. Strictly additive: a clinic with no configured
+    # panel keeps the single name it has always printed here, flags and all.
+    # (This block never honoured vis.doctor_name, unlike the bill it belongs to;
+    # left as it was rather than quietly changing every existing receipt.)
+    _panel = resolve_document_doctors(clinic)
+    doctor_header = (
+        ''.join(f'<div class="doc-name">{d.name}</div>' for d in _panel) if _panel
+        else (f'<div class="doc-name">{doctor_name}</div>' if doctor_name else '')
+    )
 
     # ── The figures, frozen when the money was taken ─────────────────────────
     amount = float(getattr(payment, 'amount', 0) or 0)
@@ -269,7 +281,7 @@ body {{
         </div>
       </div>
       <div class="clinic-info-right">
-        {f'<div class="doc-name">{doctor_name}</div>' if doctor_name else ''}
+        {doctor_header}
         {f'<p>{c_address}</p>' if c_address else ''}
         {f'<p>Tel: {c_phone}</p>' if c_phone else ''}
         {f'<p>Email: {c_email}</p>' if c_email else ''}

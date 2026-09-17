@@ -373,6 +373,14 @@ def preview_template(
                                if doctor else ""),
     )
 
+    # The doctor panel is edited on this screen but stored on the clinic, so the
+    # editor sends its unsaved list here. Without it a clinic would have to save
+    # to find out whether the names it just typed fit across the letterhead —
+    # which is the one thing a live preview exists to answer.
+    if "document_doctors" in payload:
+        from domains.infrastructure.services.pdf_fields import sanitize_document_doctors
+        clinic.document_doctors = sanitize_document_doctors(payload.get("document_doctors"))
+
     if category == "invoice":
         from domains.finance.invoice_pdf_engine import generate_invoice_html
         html = generate_invoice_html(sample_invoice(), clinic, config)

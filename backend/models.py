@@ -160,6 +160,22 @@ class Clinic(Base):
     license_number = Column(String(80), nullable=True)  # council / clinical establishment reg. no.
     license_authority = Column(String(120), nullable=True)  # issuing body
 
+    # The doctors named across the top of this clinic's documents.
+    #
+    # [{"name": "Dr Anita Rao", "qualifications": "BDS, MDS (Ortho)"}, ...]
+    #
+    # Every renderer resolved exactly one doctor — whoever treated the patient
+    # that day — so a two-partner practice had a letterhead our invoices and
+    # prescriptions could not reproduce. This is the panel, and it replaces the
+    # single header name when it is set.
+    #
+    # NULL on every clinic that has not filled it in, which keeps their
+    # documents byte-for-byte what they were. Not the staff list: a visiting
+    # consultant named on the pad may have no login, and the order the names
+    # print in is the clinic's to decide. Shape and cap live in
+    # infrastructure/services/pdf_fields.sanitize_document_doctors.
+    document_doctors = Column(JSON, nullable=True)
+
     # ── Public website ──────────────────────────────────────────────────────
     # The URL handle. clinic_code is CLN-A3X9K2B7FQ, fine as an identifier and
     # useless in a URL a patient might read out, so the site gets its own slug

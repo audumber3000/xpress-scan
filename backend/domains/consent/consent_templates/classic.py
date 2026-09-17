@@ -15,7 +15,8 @@ from domains.infrastructure.services.pdf_safety import (
 )
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
 from domains.infrastructure.services.pdf_fields import (
-    apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
+    apply_letterhead, document_doctor_lines, page_css, resolve_field_visibility,
+    resolve_letterhead,
 )
 
 
@@ -81,6 +82,16 @@ def render_consent(clinic, patient_name, patient_id, template_name,
                           if (vis.doctor_qualifications and c_doctor) else '')
 
     reg_line = f'<p>Reg No: {c_reg}</p>' if c_reg else ''
+
+    # Who the letterhead names: the clinic's own list when it has one, and the
+    # single name above when it does not — which is every clinic that has not
+    # opened the setting, so this renders unchanged for them.
+    doctor_header = ''.join(
+        f'<div class="doc-name">{d.name}</div>'
+        + (f'<div style="font-size:9.5px;font-weight:700;color:#6B7280;'
+           f'letter-spacing:.2px;">{d.qualifications}</div>' if d.qualifications else '')
+        for d in document_doctor_lines(clinic, vis, c_doctor, c_quals)
+    )
 
     # The clinic's countersignature line. Deliberately NOT the patient's
     # signature block above — that one is the whole point of the document and
@@ -259,8 +270,7 @@ body {{
         </div>
       </div>
       <div class="clinic-info-right">
-        {(f'<div class="doc-name">{c_doctor}</div>' if c_doctor else '')
-          + (f'<div style="font-size:9.5px;font-weight:700;color:#6B7280;letter-spacing:.2px;">{c_quals}</div>' if c_quals else '')}
+        {doctor_header}
         {f'<p>{c_address}</p>' if c_address else ''}
         {f'<p>Tel: {c_phone}</p>' if c_phone else ''}
         {f'<p>Email: {c_email}</p>' if c_email else ''}

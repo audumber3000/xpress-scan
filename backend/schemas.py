@@ -847,6 +847,12 @@ class CasePaperCreate(CasePaperBase):
     clinic_id: Optional[int] = None
 
 class CasePaperUpdate(BaseModel):
+    # When the visit happened. Editable because plenty of what a clinic records
+    # did not happen while somebody was sitting at the computer: a paper file
+    # being entered weeks later, a visit written up the next morning, a follow-up
+    # booked forward. Absent on a save that is not changing it, so an ordinary
+    # clinical edit never moves the date.
+    date: Optional[datetime] = None
     status: Optional[str] = None
     chief_complaint: Optional[Any] = None
     medical_history: Optional[Any] = None

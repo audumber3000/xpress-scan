@@ -440,6 +440,22 @@ def _normalise_currency(update_data: dict) -> None:
     update_data["currency_code"] = cfg["code"]
     update_data["currency_symbol"] = cfg["symbol"]
 
+
+def _normalise_document_doctors(update_data: dict) -> None:
+    """Whitelist the doctor panel before it reaches the column.
+
+    This is clinic-writable JSON that every renderer reads on every document, so
+    it is capped and stripped to {name, qualifications} here rather than
+    trusted. An empty list arrives when the clinic removed the last row, and it
+    resolves to NULL — "no panel", which is what puts the single treating
+    doctor back in the header.
+    """
+    if "document_doctors" not in update_data:
+        return
+    from domains.infrastructure.services.pdf_fields import sanitize_document_doctors
+    update_data["document_doctors"] = sanitize_document_doctors(
+        update_data["document_doctors"])
+
 @router.put(
     "/me",
     response_model=ClinicResponseDTO,
@@ -471,6 +487,7 @@ async def update_my_clinic(
             )
 
         _normalise_currency(update_data)
+        _normalise_document_doctors(update_data)
 
         clinic = clinic_service.update_clinic(current_user.clinic_id, update_data)
 
@@ -530,6 +547,7 @@ async def update_clinic(
             )
 
         _normalise_currency(update_data)
+        _normalise_document_doctors(update_data)
 
         clinic = clinic_service.update_clinic(clinic_id, update_data)
 

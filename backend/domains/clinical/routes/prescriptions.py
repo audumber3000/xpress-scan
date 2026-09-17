@@ -81,6 +81,10 @@ def render_prescription_preview(
         # The drawer sends numbers; the renderer prints strings.
         quantity=str(i.get('quantity') or ''),
         notes=str(i.get('notes') or ''),
+        # What the doctor wrote on the line — "After food", "Empty stomach".
+        # Omitted here, the preview showed a quantity under a heading that
+        # says Instructions, and disagreed with the PDF it is meant to match.
+        instructions=str(i.get('instructions') or ''),
     ) for i in (payload.items or []) if isinstance(i, dict) and (i.get('medicine_name') or '').strip()]
 
     html = PrescriptionService(db).render_prescription_html(

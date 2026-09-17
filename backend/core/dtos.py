@@ -36,6 +36,27 @@ class PatientBaseDTO(BaseModel):
     # in only to keep create/update symmetrical with the response.
     photo_url: Optional[str] = None
 
+    @field_validator('village', 'referred_by', 'treatment_type', 'email',
+                     'blood_group', mode='before')
+    @classmethod
+    def _blank_means_not_answered(cls, v):
+        """An empty box is an unanswered question, not an invalid answer.
+
+        Each of these carries a constraint that an empty string fails —
+        min_length=1 on the free-text ones, an address pattern on email — so a
+        form posting "" for a field nobody filled in came back 422 with a
+        complaint about a box the user deliberately left alone. That was
+        invisible while address was a required field; it stopped being one, and
+        a blank address must save rather than be rejected.
+
+        Normalising to None here rather than in each caller keeps every client
+        honest at once: the web drawer, the phone, and the bulk importer all
+        send blanks, and only one of them used to work around it.
+        """
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
     @field_validator('gender', mode='before')
     @classmethod
     def normalize_gender(cls, v):
@@ -95,6 +116,26 @@ class PatientUpdateDTO(BaseModel):
     tooth_notes: Optional[Dict[str, Any]] = None
     treatment_plan: Optional[List[Dict[str, Any]]] = None
     prescriptions: Optional[List[Dict[str, Any]]] = None
+
+    @field_validator('village', 'referred_by', 'treatment_type', 'email',
+                     'blood_group', mode='before')
+    @classmethod
+    def _blank_means_not_answered(cls, v):
+        """An empty box is an unanswered question, not an invalid answer.
+
+        Each of these carries a constraint that an empty string fails —
+        min_length=1 on the free-text ones, an address pattern on email — so a
+        form posting "" for a field nobody filled in came back 422 with a
+        complaint about a box the user deliberately left alone. That was
+        invisible while address was a required field; it stopped being one, and
+        a blank address must save rather than be rejected.
+
+        Same rule as PatientBaseDTO, so a field can be cleared on an edit as
+        easily as it can be left blank on a create.
+        """
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     @field_validator('gender', mode='before')
     @classmethod
@@ -296,10 +337,23 @@ class ClinicUpdateDTO(BaseModel):
     license_expiry: Optional[date] = None
     manual_whatsapp: Optional[bool] = None
     case_paper_type: Optional[str] = None
+    # Sanitised in the route before it is stored — see
+    # pdf_fields.sanitize_document_doctors for the shape and the cap. An empty
+    # list is a real instruction ("stop printing the panel") and survives the
+    # route's None filter, so clearing it works.
+    document_doctors: Optional[List[Dict[str, Any]]] = None
 
 
 class ClinicResponseDTO(ClinicBaseDTO, NullSafeResponse):
     id: int
+    # The doctors named across the top of this clinic's documents. Absent on
+    # every clinic that has not set one up, which is the signal the renderers
+    # read as "keep printing the single treating doctor".
+    #
+    # On the response and the update DTO but deliberately NOT on the base, so
+    # clinic CREATION cannot accept it: the only writer is the update route,
+    # which is where it is whitelisted and capped.
+    document_doctors: Optional[List[Dict[str, Any]]] = None
     # Unguessable public code (e.g. CLN-A3X9K2B7FQ) used to build the public
     # booking link, so the link can't be enumerated by numeric clinic id.
     clinic_code: Optional[str] = None

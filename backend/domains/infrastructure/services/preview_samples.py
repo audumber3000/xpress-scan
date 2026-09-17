@@ -28,6 +28,9 @@ def sample_clinic() -> SimpleNamespace:
         doctor_name="Dr. R. Sharma",
         primary_color=None,
         logo_url=None,
+        # The letterhead doctor panel. None means "not configured", which is
+        # what makes the renderers fall back to the single doctor.
+        document_doctors=None,
     )
 
 
@@ -53,6 +56,10 @@ def preview_clinic(clinic, doctor_name: str | None = None,
     out.name = getattr(clinic, "name", None) or "Your Clinic"
     out.primary_color = getattr(clinic, "primary_color", None)
     out.logo_url = getattr(clinic, "logo_url", None)
+    # The doctors named across the top. Read from the real clinic for the same
+    # reason the licence number is: a preview that invents them is a preview of
+    # a document nobody will ever print.
+    out.document_doctors = getattr(clinic, "document_doctors", None)
     # The name on the signature line. There is no clinics.doctor_name column —
     # a real PDF takes this from the doctor on the appointment — so the caller
     # resolves an actual user and passes it in. Blank rather than the fixture
@@ -127,14 +134,19 @@ def sample_prescription_request():
             dosage="1-0-1",
             duration="5 days",
             quantity=10,
-            notes="After meals",
+            notes="Amoxycillin trihydrate",
+            # The per-medicine instruction, which is what the column is headed.
+            # The sample carried none, so the editor's preview showed the one
+            # thing the real document also got wrong.
+            instructions="After food",
         ),
         SimpleNamespace(
             medicine_name="Ibuprofen 400mg",
             dosage="0-0-1",
             duration="3 days",
             quantity=3,
-            notes="If pain persists",
+            notes="Ibuprofen BP",
+            instructions="If pain persists",
         ),
     ]
     return SimpleNamespace(

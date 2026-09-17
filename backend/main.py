@@ -48,7 +48,7 @@ from domains.search.routes import global_search
 from domains.auth.routes import auth_clean as auth
 from domains.auth.routes import phone_login
 from domains.auth.routes import clinic_users, permissions, security
-from domains.clinic.routes import clinics, subscriptions
+from domains.clinic.routes import backup, clinics, subscriptions
 from domains.finance.routes import payments_clean as payments, invoices, ledger, offers
 from domains.finance.routes import purchase_bills, petty_cash
 from domains.communication.routes import notifications, message_templates
@@ -992,6 +992,9 @@ app.include_router(patient_files.router, prefix="/api/v1/patients", tags=["patie
 app.include_router(treatment_types.router, prefix="/api/v1/treatment-types", tags=["treatment_types"])
 app.include_router(referring_doctors.router, prefix="/api/v1/referring-doctors", tags=["referring_doctors"])
 app.include_router(clinics.router, prefix="/api/v1/clinics", tags=["clinics"])
+# Control Center -> Security -> Backup & Data. Its own prefix rather than a
+# tab of /clinics: it reads across twenty tables, not one.
+app.include_router(backup.router, prefix="/api/v1/backup", tags=["backup"])
 app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["invoices"])
