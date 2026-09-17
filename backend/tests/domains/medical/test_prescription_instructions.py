@@ -118,3 +118,63 @@ def test_switching_the_advice_block_off_leaves_the_medicine_lines_alone():
     the block must not take the per-medicine column with it."""
     html = _render(notes=ADVICE_NOTES, show={'instructions_section': False})
     assert 'After food' in html
+
+
+# ─── The date the document carries ───────────────────────────────────────────
+#
+# It used to be `datetime.now()` read at RENDER time, which was wrong twice
+# over: re-downloading a prescription from March stamped it with the day it was
+# downloaded, and once a case paper's date became editable, medicines written on
+# a visit entered from June printed as today's.
+
+import datetime
+
+from domains.medical.services.prescription_service import (
+    prescription_issued_at, printed_on,
+)
+
+
+def test_the_visit_date_is_what_prints():
+    assert printed_on(_clinic(), datetime.datetime(2026, 6, 3, 10, 0)) == '03 June 2026'
+
+
+def test_it_prints_the_clinics_day_not_the_utc_one():
+    """18:30 UTC is already the next morning in India. A prescription written at
+    midnight in Mumbai belongs to the day the clinic thinks it is."""
+    late = datetime.datetime(2026, 6, 3, 18, 30)
+    assert printed_on(_clinic(timezone='Asia/Kolkata'), late) == '04 June 2026'
+    assert printed_on(_clinic(timezone='Europe/London'), late) == '03 June 2026'
+
+
+def test_an_offset_aware_value_is_respected():
+    aware = datetime.datetime(2026, 6, 3, 23, 30,
+                              tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
+    assert printed_on(_clinic(), aware) == '03 June 2026'
+
+
+def test_with_nothing_to_go_on_it_falls_back_to_today():
+    today = datetime.datetime.now(datetime.timezone.utc)
+    assert printed_on(_clinic(), None)[-4:] == str(today.year)
+
+
+def test_the_render_stamps_the_visit_date_on_the_page():
+    html = _render(clinic=_clinic())
+    assert '28 June 2026' not in html
+    html = PrescriptionService(None).render_prescription_html(
+        NS(id=7, name='Asha Mehta', age=34, gender='female', phone='9820011111',
+           display_id='PT-7'),
+        _clinic(), NS(items=[_item()], notes=''), config_override=_cfg('classic'),
+        issued_at=datetime.datetime(2026, 6, 3, 10, 0),
+    )
+    assert '03 June 2026' in html
+
+
+def test_a_saved_prescription_takes_its_date_from_its_case_paper():
+    rx = NS(issued_on=datetime.datetime(2026, 6, 3, 10, 0),
+            created_at=datetime.datetime(2026, 9, 17, 10, 0))
+    assert prescription_issued_at(rx) == datetime.datetime(2026, 6, 3, 10, 0)
+
+
+def test_a_prescription_with_no_visit_falls_back_to_when_it_was_written():
+    rx = NS(issued_on=None, created_at=datetime.datetime(2026, 9, 17, 10, 0))
+    assert prescription_issued_at(rx) == datetime.datetime(2026, 9, 17, 10, 0)

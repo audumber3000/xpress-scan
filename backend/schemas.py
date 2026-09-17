@@ -1017,6 +1017,11 @@ class PrescriptionOut(PrescriptionBase):
     pdf_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    # The date the prescription belongs to: its visit, or when it was written.
+    # Distinct from created_at, which is when the ROW was made — on a case paper
+    # entered weeks later those are different days, and the printed document
+    # carries this one. See Prescription.issued_on.
+    issued_on: Optional[datetime] = None
     # The same medicines again, in the shape the phone reads (`name`, `dosage`,
     # `duration`, `notes`). Installed builds look for `rx.medicines` and find
     # nothing in `items`, so without this every prescription shows on a phone as

@@ -414,8 +414,8 @@ const BookingPage = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Address *</label>
-                  <input type="text" name="village" value={formData.village} onChange={handleInputChange} required
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Address</label>
+                  <input type="text" name="village" value={formData.village} onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2a276e] focus:border-transparent text-sm"
                     placeholder="Your address" />
                 </div>

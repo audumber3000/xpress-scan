@@ -388,7 +388,7 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
                             {prescriptions.map(rx => (
                                 <tr key={rx.id} className="hover:bg-gray-50 transition-colors cursor-pointer group" onClick={() => openDrawer(rx)}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                                        {formatDate(rx.created_at)}
+                                        {formatDate(rx.issued_on || rx.created_at)}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {rx.visit_number ? `Visit #${rx.visit_number}` : '—'}
@@ -433,7 +433,7 @@ const PatientPrescriptions = ({ patientId, patientPhone, visits = [], hideHeader
                             <h2 className="text-lg font-bold text-gray-900">Prescription</h2>
                             {selectedRx && (
                                 <p className="text-xs text-gray-400 mt-0.5">
-                                    {formatDate(selectedRx.created_at)}
+                                    {formatDate(selectedRx.issued_on || selectedRx.created_at)}
                                     {selectedRx.visit_number ? ` · Visit ${selectedRx.visit_number}` : ''}
                                 </p>
                             )}

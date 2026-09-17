@@ -361,6 +361,24 @@ class Prescription(Base):
     appointment = relationship("Appointment")
     case_paper = relationship("CasePaper")
 
+    @property
+    def issued_on(self):
+        """The date this prescription belongs to.
+
+        The VISIT it was written on, falling back to the row's own timestamp for
+        one written straight from the patient file with no case paper behind it.
+
+        Not the same as `created_at`, and the difference started mattering the
+        moment a case paper's date became editable: a clinic entering a paper
+        file from June writes those medicines on June's visit, and a document
+        stamped with the day it was typed up disagrees with the record it came
+        from. Read by the PDF, the preview and the lists, so all three say the
+        same thing.
+        """
+        paper = self.case_paper
+        return (paper.date if paper else None) or self.created_at
+
+
 class ClinicalSetting(Base):
     __tablename__ = 'clinical_settings'
     id = Column(Integer, primary_key=True, index=True)

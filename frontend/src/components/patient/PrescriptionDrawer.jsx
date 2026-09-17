@@ -10,7 +10,7 @@ import { isManualWhatsApp, openWhatsApp, downloadAuthedFile } from "../../utils/
 const A4_PX_W = Math.round((210 / 25.4) * 96);
 const A4_PX_H = Math.round((297 / 25.4) * 96);
 
-const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, initialData }) => {
+const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, initialData, casePaperId }) => {
     const { user } = useAuth();
     const [mode, setMode] = useState('edit');
     const [items, setItems] = useState([
@@ -72,6 +72,11 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
                     items: its.filter((i) => (i.medicine_name || '').trim()),
                     notes: nts,
                     prescription_id: initialData?.id || null,
+                    // Which visit this belongs to, so the preview carries the
+                    // case paper's date. Without it a prescription written on
+                    // a back-dated visit previewed as today and then printed
+                    // as the visit — two dates for one document.
+                    case_paper_id: casePaperId || null,
                 });
                 if (!cancelled) { setPreviewHtml(res?.html || ''); setPreviewError(''); }
             } catch (e) {
@@ -81,7 +86,7 @@ const PrescriptionDrawer = ({ isOpen, onClose, onSave, patientId, patientData, i
             }
         }, 250);
         return () => { cancelled = true; clearTimeout(handle); };
-    }, [isOpen, mode, patientId, previewKey, initialData?.id]);
+    }, [isOpen, mode, patientId, previewKey, initialData?.id, casePaperId]);
 
     useEffect(() => {
         if (isOpen) {

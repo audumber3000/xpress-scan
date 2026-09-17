@@ -122,3 +122,30 @@ def test_a_save_that_does_not_mention_the_date_leaves_it_unset():
     paper with whatever the client happened to default to."""
     from schemas import CasePaperUpdate
     assert 'date' not in CasePaperUpdate(notes="x").model_dump(exclude_unset=True)
+
+
+# ─── A prescription written on that visit carries the visit's date ───────────
+
+def test_a_prescription_on_a_case_paper_takes_the_case_papers_date(db):
+    """The whole point of back-dating a case paper is that the visit happened
+    then. Medicines written on it are part of that visit, not of today."""
+    from models import Prescription
+    db.add(Prescription(id=1, clinic_id=CLINIC, patient_id=1, case_paper_id=1,
+                        items=[], created_at=SEPT))
+    db.commit()
+
+    paper = _paper(db)
+    paper.date = JUNE
+    db.commit()
+
+    rx = db.get(Prescription, 1)
+    assert rx.issued_on == JUNE
+    assert rx.created_at == SEPT  # the row was still made in September
+
+
+def test_a_prescription_with_no_case_paper_falls_back_to_when_it_was_written(db):
+    """Written straight from the patient file, there is no visit to borrow."""
+    from models import Prescription
+    db.add(Prescription(id=2, clinic_id=CLINIC, patient_id=1, items=[], created_at=SEPT))
+    db.commit()
+    assert db.get(Prescription, 2).issued_on == SEPT

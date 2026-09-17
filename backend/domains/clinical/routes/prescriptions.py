@@ -1,13 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Response
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Prescription, User, Patient
+from models import Prescription, User, Patient, CasePaper
 from schemas import PrescriptionCreate, PrescriptionOut
 from core.auth_utils import get_current_user, require_doctor_or_owner
 from typing import List, Optional
 from datetime import datetime
 from domains.activity.routes.activity_log import push_activity
-from domains.medical.services.prescription_service import PrescriptionService
+from domains.medical.services.prescription_service import (
+    PrescriptionService, prescription_issued_at,
+)
 from domains.infrastructure.services.pdf_service import html_template_to_pdf
 from core.notification_dispatch import notify_event, InsufficientWalletBalance
 import os
@@ -26,6 +28,11 @@ class RenderPreviewIn(_BaseModel):
     items: list = []
     notes: Optional[str] = None
     prescription_id: Optional[int] = None
+    # The visit being written up. Sent so the preview carries the VISIT's date
+    # rather than today's — on a case paper back-dated to June, a preview
+    # stamped with today would disagree with the sheet that comes out of the
+    # printer. Guarded against the caller's clinic and patient below.
+    case_paper_id: Optional[int] = None
 
 
 @router.post("/render-preview")
@@ -66,6 +73,7 @@ def render_prescription_preview(
     # The doctor the printed copy would carry: whoever wrote an existing one,
     # otherwise the person writing it now.
     doctor = current_user
+    rx = None
     if payload.prescription_id:
         rx = db.query(Prescription).filter(
             Prescription.id == payload.prescription_id,
@@ -73,6 +81,21 @@ def render_prescription_preview(
         ).first()
         if rx and rx.doctor_id:
             doctor = db.query(User).filter(User.id == rx.doctor_id).first() or current_user
+
+    # And the date it would carry: the visit first, then an existing
+    # prescription's own timestamp, then today. Both lookups are scoped to the
+    # caller's clinic AND this patient, so a case paper id from elsewhere
+    # previews as today rather than leaking somebody else's visit date.
+    issued_at = None
+    if payload.case_paper_id:
+        paper = db.query(CasePaper).filter(
+            CasePaper.id == payload.case_paper_id,
+            CasePaper.clinic_id == current_user.clinic_id,
+            CasePaper.patient_id == patient.id,
+        ).first()
+        issued_at = getattr(paper, 'date', None)
+    if issued_at is None and rx is not None:
+        issued_at = prescription_issued_at(rx)
 
     items = [SimpleNamespace(
         medicine_name=str(i.get('medicine_name') or ''),
@@ -89,7 +112,7 @@ def render_prescription_preview(
 
     html = PrescriptionService(db).render_prescription_html(
         patient, clinic, SimpleNamespace(items=items, notes=payload.notes or ''),
-        config_override=config, doctor=doctor,
+        config_override=config, doctor=doctor, issued_at=issued_at,
     )
     return {"html": _with_screen_page_box(html, resolve_letterhead(config))}
 

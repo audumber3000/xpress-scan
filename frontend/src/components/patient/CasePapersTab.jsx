@@ -1236,6 +1236,7 @@ const CasePapersTab = ({
           onClose={() => setPrescriptionOpen(false)}
           patientId={patientData?.id}
           patientData={patientData}
+          casePaperId={selectedCasePaper?.isNew ? null : selectedCasePaper?.id}
           initialData={casePaperPrescriptions.length > 0
             ? casePaperPrescriptions[casePaperPrescriptions.length - 1]
             : null}

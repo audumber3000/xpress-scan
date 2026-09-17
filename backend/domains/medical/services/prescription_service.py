@@ -18,12 +18,51 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
+def printed_on(clinic, issued_at=None) -> str:
+    """The date the prescription carries, in the clinic's own timezone.
+
+    Three answers, tried in order by the callers: the VISIT this prescription
+    belongs to, the day it was written, and only then today.
+
+    That order started mattering the moment a case paper's date became
+    editable. A clinic entering a paper file from June writes the medicines on
+    that visit; printing today's date on them makes the document disagree with
+    the record it came from. It was already wrong in a quieter way — this read
+    `datetime.now()` at RENDER time, so re-downloading a prescription from
+    March stamped it with the day it was downloaded.
+
+    Naive values are read as UTC, which is how every timestamp in this database
+    is stored, then shown in the clinic's timezone. A prescription written at
+    1 am in Mumbai is 7:30 pm UTC the day before, and it belongs to the day the
+    clinic thinks it is.
+    """
+    from zoneinfo import ZoneInfo
+    from core.clinic_time import clinic_tzinfo
+
+    moment = issued_at or datetime.now()
+    if getattr(moment, 'tzinfo', None) is None:
+        moment = moment.replace(tzinfo=ZoneInfo('UTC'))
+    return moment.astimezone(clinic_tzinfo(clinic)).strftime('%d %B %Y')
+
+
+def prescription_issued_at(prescription):
+    """When a saved prescription should say it was written.
+
+    The rule lives on the model as `Prescription.issued_on`, so the PDF, the
+    API responses and the lists cannot drift apart. This is the defensive way in
+    for the render paths, which are also handed hand-built stand-ins in tests
+    and previews.
+    """
+    return (getattr(prescription, 'issued_on', None)
+            or getattr(prescription, 'created_at', None))
+
+
 class PrescriptionService:
     def __init__(self, db: Session):
         self.db = db
         self.template_service = TemplateService()
 
-    def render_prescription_html(self, patient, clinic, prescription_data, config_override=None, doctor=None) -> str:
+    def render_prescription_html(self, patient, clinic, prescription_data, config_override=None, doctor=None, issued_at=None) -> str:
         """Render the prescription HTML using the same logic as production PDF
         generation. Pass `config_override` (a config-shaped object with
         primary_color/footer_text/logo_url) to skip the DB lookup — used by
@@ -31,6 +70,10 @@ class PrescriptionService:
 
         `doctor` is the prescribing User; if their `signature_url` is set
         (Phase 5) the signature image is embedded in the signature box.
+
+        `issued_at` is when the prescription was written — the date of the visit
+        it belongs to, where there is one. Omitted, the document falls back to
+        today. See `printed_on`.
         """
         # ── Branding ──────────────────────────────────────────────────────────
         if config_override is not None:
@@ -355,7 +398,7 @@ class PrescriptionService:
             'patient_gender':       p_gender,
             'patient_age_sex':      p_age_sex,
             'patient_phone':        p_phone,
-            'current_date':         datetime.now().strftime('%d %B %Y'),
+            'current_date':         printed_on(clinic, issued_at),
             'clinical_notes_html':  clinical_notes_html,
             'prescription_items':   items_html,
             'advice_html':          advice_html,
@@ -378,7 +421,7 @@ class PrescriptionService:
 
         return html_content
 
-    def generate_prescription_pdf(self, patient: Patient, clinic: Clinic, prescription_data: PrescriptionRequestDTO, doctor=None, config=None):
+    def generate_prescription_pdf(self, patient: Patient, clinic: Clinic, prescription_data: PrescriptionRequestDTO, doctor=None, config=None, issued_at=None):
         """
         Generate a prescription PDF, upload to R2, and register in PatientDocument.
         `doctor` is the prescribing User — if set, their signature is embedded.
@@ -396,7 +439,8 @@ class PrescriptionService:
         routes passed it; this one did not.
         """
         html_content = self.render_prescription_html(
-            patient, clinic, prescription_data, config_override=config, doctor=doctor)
+            patient, clinic, prescription_data, config_override=config,
+            doctor=doctor, issued_at=issued_at)
 
         # ── Convert to PDF ────────────────────────────────────────────────────
         temp_pdf_path = html_template_to_pdf(html_content, {'patient_name': patient.name})
@@ -524,6 +568,10 @@ class PrescriptionService:
         html_content = self.render_prescription_html(
             patient, clinic, prescription_data,
             config_override=config, doctor=doctor,
+            # The visit it belongs to, not the moment somebody pressed
+            # Download. A prescription re-opened in September used to print
+            # September's date on March's medicines.
+            issued_at=prescription_issued_at(prescription),
         )
         return html_content, {}
 

@@ -13,7 +13,7 @@ import { formatDate } from '../../../utils/datetime';
  */
 const PrescriptionsCard = ({ prescriptions = [], onNew, onOpen, onDownload, className = '' }) => {
   const recent = [...prescriptions]
-    .sort((a, b) => new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0))
+    .sort((a, b) => new Date(b.issued_on || b.created_at || b.date || 0) - new Date(a.issued_on || a.created_at || a.date || 0))
     .slice(0, 3);
 
   return (
@@ -40,7 +40,7 @@ const PrescriptionsCard = ({ prescriptions = [], onNew, onOpen, onDownload, clas
                 className="min-w-0 flex-1 text-left cursor-pointer group"
               >
                 <p className="text-xs font-semibold text-gray-900 group-hover:text-[#2a276e] transition-colors">
-                  {formatDate(rx.created_at || rx.date)}
+                  {formatDate(rx.issued_on || rx.created_at || rx.date)}
                 </p>
                 <p className="text-[11px] text-gray-400 truncate" title={summary}>
                   {summary || `${items.length || 0} item${items.length === 1 ? '' : 's'}`}
@@ -52,7 +52,7 @@ const PrescriptionsCard = ({ prescriptions = [], onNew, onOpen, onDownload, clas
                   target="_blank"
                   rel="noreferrer"
                   title="Open the PDF"
-                  aria-label={`Open the prescription PDF from ${formatDate(rx.created_at || rx.date)}`}
+                  aria-label={`Open the prescription PDF from ${formatDate(rx.issued_on || rx.created_at || rx.date)}`}
                   className="p-1.5 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-gray-50 transition-colors flex-shrink-0"
                 >
                   <Download size={14} />
