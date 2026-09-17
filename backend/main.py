@@ -944,9 +944,25 @@ origins = [
     "https://api.molarplus.com",
 ]
 
+# Any localhost port, in development only.
+#
+# The list above hardcodes three dev ports, and Vite picks whatever is free — so
+# running the app beside another project put the frontend on :5175 and every
+# request failed as "We couldn't reach the server", which reads as the backend
+# being down rather than as CORS. Guessing the next port and adding it is how
+# that list grew to three entries in the first place.
+#
+# Gated on SENTRY_ENVIRONMENT, which is the one environment flag this app
+# already sets, and it defaults to "production" — so the regex is OFF unless a
+# developer has explicitly said otherwise. localhost is not a domain an attacker
+# can point at this server anyway; it resolves to the victim's own machine.
+_is_production = os.environ.get("SENTRY_ENVIRONMENT", "production") == "production"
+_dev_origin_regex = None if _is_production else r"^http://(localhost|127\.0\.0\.1):\d+$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=_dev_origin_regex,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
