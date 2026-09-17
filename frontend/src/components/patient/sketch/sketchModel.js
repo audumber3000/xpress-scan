@@ -16,7 +16,7 @@
  *     v: 1,
  *     pages: [{
  *       id, backdrop: 'adult-chart' | 'child-chart' | 'grid' | 'blank',
- *       strokes: [{ id, tool: 'pen'|'marker', color, size, points: [[x,y,pressure], …] }],
+ *       strokes: [{ id, tool: 'pen'|'marker', color, size, sim, points: [[x,y,pressure], …] }],
  *     }],
  *   }
  *
@@ -97,6 +97,13 @@ export const normaliseSketch = (raw) => {
               Number(y) || 0,
               Number.isFinite(pressure) ? pressure : 0.5,
             ]),
+          // Whether the pointer had no pressure of its own, so the renderer
+          // should infer it from speed. Stored per stroke so the note looks the
+          // same on every device and in the PDF. A stroke saved before the flag
+          // existed is judged by its samples: all exactly 0.5 is a mouse.
+          sim: typeof s.sim === 'boolean'
+            ? s.sim
+            : s.points.every((pt) => !Array.isArray(pt) || pt[2] === undefined || pt[2] === 0.5),
         })),
     }));
   return pages.length ? { v: SKETCH_VERSION, pages } : null;

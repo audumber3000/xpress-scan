@@ -93,7 +93,10 @@ const MAX_DOCTORS = 8;
 // Small UI primitives
 // ─────────────────────────────────────────────────────────────────────────────
 
-const Section = ({ title, children, defaultOpen = true }) => {
+// Closed until opened. Six sections open at once made the column a scroll to
+// get anywhere, and the preview beside it — the thing people came to look at —
+// was what they were reading least. The titles are the menu.
+const Section = ({ title, children, defaultOpen = false }) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border-b border-gray-100">
@@ -517,7 +520,7 @@ const TemplatesEditor = () => {
                     letterhead we could not reproduce. This is the panel, and it
                     is the clinic's, not this tab's: the same names print on the
                     invoice, the prescription and the consent form. */}
-                <Section title="Doctors on your documents" defaultOpen={false}>
+                <Section title="Doctors on your documents">
                   <p className="text-xs text-gray-500 -mt-1">
                     The names printed at the top of your invoices, prescriptions and
                     consent forms. Leave this empty and each document names the doctor
@@ -668,7 +671,7 @@ const TemplatesEditor = () => {
                     band across the top: the sheet that prompted this has a
                     services list down the left margin and a vitals box down the
                     right, so all four edges are measured independently. */}
-                <Section title="Pre-printed letterhead" defaultOpen={false}>
+                <Section title="Pre-printed letterhead">
                   <label className="flex items-start gap-3 cursor-pointer">
                     <input
                       type="checkbox"

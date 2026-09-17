@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Clock, Check } from 'lucide-react';
+import { Clock, Check, Pencil } from 'lucide-react';
 import { clinicInputParts, clinicPartsToServer, formatDate, formatTime } from '../../utils/datetime';
 
 /**
@@ -45,24 +45,28 @@ const CasePaperDateField = ({ value, onChange, disabled = false }) => {
   };
 
   if (!editing) {
+    // The pencil is always there, the same one every other editable value in
+    // the app carries. A control that only appears on hover does not exist on
+    // a tablet — there is no hover — and this screen is used on tablets more
+    // than anywhere else.
     return (
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setEditing(true)}
-        title={disabled ? undefined : 'Change the visit date and time'}
-        className="group mt-0.5 flex items-center gap-2 rounded-md -mx-1 px-1 py-0.5 text-left transition-colors hover:bg-gray-50 disabled:cursor-default disabled:hover:bg-transparent"
-      >
+      <div className="mt-0.5 flex items-center gap-1.5">
         <Clock size={12} className="text-gray-400" />
         <span className="text-xs font-bold text-gray-500">
           {formatDate(value)}{parts.time ? ` at ${formatTime(value)}` : ''}
         </span>
         {!disabled && (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[#29828a] opacity-0 transition-opacity group-hover:opacity-100">
-            Edit
-          </span>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            title="Change the visit date and time"
+            aria-label="Change the visit date and time"
+            className="p-1 rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-[#2a276e]"
+          >
+            <Pencil size={12} />
+          </button>
         )}
-      </button>
+      </div>
     );
   }
 
@@ -72,19 +76,19 @@ const CasePaperDateField = ({ value, onChange, disabled = false }) => {
         type="date"
         value={parts.date}
         onChange={(e) => set(e.target.value, parts.time)}
-        className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 outline-none focus:border-[#29828a] focus:ring-1 focus:ring-[#29828a]/20"
+        className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 outline-none focus:border-[#2a276e] focus:ring-1 focus:ring-[#2a276e]/20"
       />
       <input
         type="time"
         value={parts.time}
         onChange={(e) => set(parts.date, e.target.value)}
-        className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 outline-none focus:border-[#29828a] focus:ring-1 focus:ring-[#29828a]/20"
+        className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 outline-none focus:border-[#2a276e] focus:ring-1 focus:ring-[#2a276e]/20"
       />
       <button
         type="button"
         onClick={() => setEditing(false)}
         aria-label="Done editing the visit date"
-        className="flex h-[26px] w-[26px] items-center justify-center rounded-md bg-[#29828a] text-white transition-transform active:scale-95"
+        className="flex h-[26px] w-[26px] items-center justify-center rounded-md bg-[#2a276e] text-white transition-[background-color,transform] hover:bg-[#1a1548] active:scale-95"
       >
         <Check size={13} strokeWidth={3} />
       </button>

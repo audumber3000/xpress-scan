@@ -277,6 +277,110 @@ def update_case_paper(
     db.refresh(db_paper)
     return db_paper
 
+class SketchExportIn(BaseModel):
+    # One SVG per page, as the browser drew them. Treated as hostile and
+    # rebuilt from an allowlist before it goes anywhere near the renderer —
+    # see domains/clinical/sketch_pdf.
+    pages: List[str]
+    # File it on the patient's record as well as handing it back.
+    save: bool = True
+
+
+@router.post("/{paper_id}/sketch-pdf")
+def export_sketch_pdf(
+    paper_id: int,
+    body: SketchExportIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor_or_owner()),
+):
+    """The visit's pen notes as a letterheaded PDF, filed under Documents.
+
+    Returns the PDF itself, so the browser can download it in the same round
+    trip. Whether it was also filed is in `X-Document-Saved` — and it is reported
+    rather than assumed: a storage failure still hands the clinician their PDF,
+    and says plainly that it is not on the record.
+    """
+    from domains.clinical.sketch_pdf import (
+        SketchRejected, build_html, display_name, export_filename,
+        prepare_pages, render_pdf,
+    )
+    from domains.infrastructure.services.r2_storage import (
+        StorageCategory, upload_bytes_to_r2,
+    )
+    from models import PatientDocument
+
+    paper = db.query(CasePaper).filter(
+        CasePaper.id == paper_id,
+        CasePaper.clinic_id == current_user.clinic_id,
+    ).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Case paper not found")
+
+    try:
+        pages = prepare_pages(body.pages)
+    except SketchRejected as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+    patient = db.query(Patient).filter(
+        Patient.id == paper.patient_id,
+        Patient.clinic_id == current_user.clinic_id,
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    # Who drew it: the visit's own doctor, otherwise whoever is exporting.
+    doctor = paper.dentist or current_user
+    try:
+        pdf = render_pdf(build_html(
+            pages, clinic=clinic, patient=patient, paper=paper,
+            doctor_name=getattr(doctor, 'name', '') or '',
+        ))
+    except Exception as e:  # noqa: BLE001
+        print(f"⚠️ Pen notes PDF failed for case paper {paper_id}: {e}")
+        raise HTTPException(status_code=500, detail="The PDF could not be built. Please try again.")
+
+    # Named once: the stored key and the downloaded file are the same document
+    # and should say so.
+    filename = export_filename(paper)
+    saved, document_id = False, None
+    if body.save:
+        key = upload_bytes_to_r2(
+            data=pdf,
+            filename=filename,
+            content_type='application/pdf',
+            clinic_id=current_user.clinic_id,
+            patient_id=patient.id,
+            category=StorageCategory.DOCUMENTS,
+        )
+        if key:
+            doc = PatientDocument(
+                patient_id=patient.id,
+                clinic_id=current_user.clinic_id,
+                case_paper_id=paper.id,
+                file_name=display_name(clinic, paper),
+                file_path=key,
+                file_size=len(pdf),
+                file_type='pdf',
+                category='Notes',
+                uploaded_by=current_user.id,
+            )
+            db.add(doc)
+            db.commit()
+            db.refresh(doc)
+            saved, document_id = True, doc.id
+
+    return Response(
+        content=pdf,
+        media_type='application/pdf',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'X-Document-Saved': 'true' if saved else 'false',
+            'X-Document-Id': str(document_id or ''),
+        },
+    )
+
+
 @router.delete("/{paper_id}")
 def delete_case_paper(
     paper_id: int,

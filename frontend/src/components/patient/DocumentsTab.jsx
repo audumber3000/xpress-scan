@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, FileText, Download, ExternalLink, FileSignature, Receipt, ClipboardList, Eye, Loader2, HeartPulse } from 'lucide-react';
+import { Upload, Plus, FileText, Download, ExternalLink, FileSignature, Receipt, ClipboardList, Eye, Loader2, HeartPulse, PenLine } from 'lucide-react';
 import Spinner from '../common/Spinner';
 import EmptyState from '../common/EmptyState';
 import { noData } from '../../assets/illustrations';
@@ -41,6 +41,7 @@ const CATEGORY_ICON = {
   prescription: ClipboardList,
   report: FileText,
   invoice: Receipt,
+  notes: PenLine,
   upload: FileText,
 };
 

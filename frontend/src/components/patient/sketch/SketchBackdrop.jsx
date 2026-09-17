@@ -24,71 +24,136 @@ const TOOTH_FILL = '#fbfbfa';
 const TOOTH_LINE = '#cbd5e1';
 const LABEL = '#94a3b8';
 
-// ── One tooth ───────────────────────────────────────────────────────────────
-// Anteriors are drawn narrow and rounded, posteriors square with a fissure
-// cross. Not anatomy — a diagram. It has to be recognisable at a glance and
-// leave room to be written on, and a faithful molar is neither.
-const Tooth = ({ x, y, w, h, posterior, upper }) => {
-  const r = posterior ? 3 : 5;
+// ── Laying teeth along an arch ──────────────────────────────────────────────
+//
+// Teeth are spaced by DISTANCE along the curve, not by angle. Equal angles
+// bunch up at the ends of an ellipse, where the curve turns vertical — which
+// stacked the three molars on each side on top of one another and hid their
+// numbers. Spacing by arc length, with each tooth sized like the real thing and
+// turned to follow the curve, is what makes it read as a mouth.
+//
+// Drawn as paths with the corners computed here rather than with a
+// `transform`: the PDF export rebuilds this SVG from an allowlist, and keeping
+// that list free of transforms keeps it small.
+
+// Relative crown widths, patient's right to left. Molars are wide, laterals
+// narrow; the numbers are proportions of real mesiodistal widths, not mm.
+const ADULT_WIDTHS = [10, 10, 10, 7, 7, 7.5, 6.5, 8.5, 8.5, 6.5, 7.5, 7, 7, 10, 10, 10];
+const CHILD_WIDTHS = [8, 7.5, 6, 5.5, 6.5, 6.5, 5.5, 6, 7.5, 8];
+
+const f = (n) => n.toFixed(1);
+
+/** Points along the arch with their running length, for arc-length lookup. */
+const sampleArch = ({ cx, cy, rx, ry, t0, t1, upper }) => {
+  const N = 480;
+  const out = [];
+  let length = 0;
+  let prev = null;
+  for (let i = 0; i <= N; i += 1) {
+    const t = t0 + ((t1 - t0) * i) / N;
+    const x = cx - Math.cos(t) * rx;
+    const y = upper ? cy - Math.sin(t) * ry : cy + Math.sin(t) * ry;
+    if (prev) length += Math.hypot(x - prev.x, y - prev.y);
+    const pt = { t, x, y, length };
+    out.push(pt);
+    prev = pt;
+  }
+  return out;
+};
+
+/** Where along the arch a given distance falls, with its direction. */
+const at = (samples, s, { cx, cy, rx, ry }) => {
+  let lo = 0;
+  let hi = samples.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (samples[mid].length < s) lo = mid; else hi = mid;
+  }
+  const a = samples[lo];
+  const b = samples[hi];
+  const k = b.length === a.length ? 0 : (s - a.length) / (b.length - a.length);
+  const x = a.x + (b.x - a.x) * k;
+  const y = a.y + (b.y - a.y) * k;
+  // Outward normal of the ellipse, from its gradient; tangent is square to it.
+  let nx = (x - cx) / (rx * rx);
+  let ny = (y - cy) / (ry * ry);
+  const nl = Math.hypot(nx, ny) || 1;
+  nx /= nl; ny /= nl;
+  return { x, y, nx, ny, tx: -ny, ty: nx };
+};
+
+/** A rounded rectangle centred on (x, y), turned to lie along (tx, ty). */
+const toothOutline = ({ x, y, tx, ty, nx, ny }, w, h, r) => {
+  // Local (u along the arch, v away from the centre) → page.
+  const p = (u, v) => [x + u * tx + v * nx, y + u * ty + v * ny];
+  const hw = w / 2;
+  const hh = h / 2;
+  const pt = (u, v) => p(u, v).map(f).join(' ');
+  // Four straight edges, each corner a quadratic through the true corner.
+  return [
+    `M ${pt(-hw + r, -hh)}`,
+    `L ${pt(hw - r, -hh)}`, `Q ${pt(hw, -hh)} ${pt(hw, -hh + r)}`,
+    `L ${pt(hw, hh - r)}`, `Q ${pt(hw, hh)} ${pt(hw - r, hh)}`,
+    `L ${pt(-hw + r, hh)}`, `Q ${pt(-hw, hh)} ${pt(-hw, hh - r)}`,
+    `L ${pt(-hw, -hh + r)}`, `Q ${pt(-hw, -hh)} ${pt(-hw + r, -hh)}`,
+    'Z',
+  ].join(' ');
+};
+
+const segment = ({ x, y, tx, ty, nx, ny }, u1, v1, u2, v2) => ({
+  x1: f(x + u1 * tx + v1 * nx), y1: f(y + u1 * ty + v1 * ny),
+  x2: f(x + u2 * tx + v2 * nx), y2: f(y + u2 * ty + v2 * ny),
+});
+
+/**
+ * One arch. `upper` draws it as ∩ above the centre line, otherwise ∪ below.
+ * Molars get the fissure cross, anteriors the incisal line — enough to tell
+ * them apart at a glance, while leaving room to write on.
+ */
+const Arch = ({ teeth, widths, geom, labels, height, posteriorCount }) => {
+  const samples = sampleArch(geom);
+  const total = samples[samples.length - 1].length;
+  const sum = widths.reduce((a, b) => a + b, 0);
+  const GAP = 6;
+
+  let run = 0;
   return (
     <g>
-      <rect
-        x={x} y={y} width={w} height={h} rx={r} ry={r}
-        fill={TOOTH_FILL} stroke={TOOTH_LINE} strokeWidth="1.2"
-      />
-      {posterior ? (
-        <>
-          <line x1={x + w / 2} y1={y + h * 0.22} x2={x + w / 2} y2={y + h * 0.78}
-            stroke={TOOTH_LINE} strokeWidth="1" />
-          <line x1={x + w * 0.2} y1={y + h / 2} x2={x + w * 0.8} y2={y + h / 2}
-            stroke={TOOTH_LINE} strokeWidth="1" />
-        </>
-      ) : (
-        <line
-          x1={x + w * 0.22} y1={upper ? y + h * 0.7 : y + h * 0.3}
-          x2={x + w * 0.78} y2={upper ? y + h * 0.7 : y + h * 0.3}
-          stroke={TOOTH_LINE} strokeWidth="1"
-        />
-      )}
+      {teeth.map((tooth, i) => {
+        const share = (widths[i] / sum) * total;
+        const place = at(samples, run + share / 2, geom);
+        run += share;
+        const w = Math.max(18, share - GAP);
+        const h = height;
+        const posterior = i < posteriorCount || i >= teeth.length - posteriorCount;
+        const cross = posterior
+          ? [segment(place, -w * 0.3, 0, w * 0.3, 0), segment(place, 0, -h * 0.28, 0, h * 0.28)]
+          : [segment(place, -w * 0.28, -h * 0.22, w * 0.28, -h * 0.22)];
+        // The number sits outside the arch, clear of the crown.
+        const lx = place.x + place.nx * (h / 2 + 15);
+        const ly = place.y + place.ny * (h / 2 + 15) + 4.5;
+        return (
+          <g key={tooth}>
+            <path
+              d={toothOutline(place, w, h, Math.min(6, w / 4))}
+              fill={TOOTH_FILL} stroke={TOOTH_LINE} strokeWidth="1.2"
+            />
+            {cross.map((c, k) => (
+              <line key={k} {...c} stroke={TOOTH_LINE} strokeWidth="1" />
+            ))}
+            <text
+              x={f(lx)} y={f(ly)}
+              textAnchor="middle" fontSize="13" fontWeight="600" fill={LABEL}
+              fontFamily="system-ui, sans-serif"
+            >
+              {labels[tooth]}
+            </text>
+          </g>
+        );
+      })}
     </g>
   );
 };
-
-/**
- * One arch, laid out as an arc rather than a straight row.
- *
- * A straight line of sixteen boxes is a spreadsheet. The curve is what makes it
- * read as a mouth from across the chair, which matters because the person being
- * shown it is the patient, not the dentist.
- */
-const Arch = ({ teeth, cx, cy, rx, ry, upper, labels, toothW, toothH }) => (
-  <g>
-    {teeth.map((tooth, i) => {
-      // Spread across the arc, leaving the ends open so the last molars sit at
-      // roughly the corners of the mouth rather than folding underneath.
-      const t = teeth.length === 1 ? 0.5 : i / (teeth.length - 1);
-      const angle = Math.PI * (0.08 + t * 0.84);
-      const x = cx - Math.cos(angle) * rx;
-      const y = upper ? cy - Math.sin(angle) * ry : cy + Math.sin(angle) * ry;
-      const posterior = i < 5 || i >= teeth.length - 5;
-      return (
-        <g key={tooth}>
-          <Tooth
-            x={x - toothW / 2} y={y - toothH / 2}
-            w={toothW} h={toothH} posterior={posterior} upper={upper}
-          />
-          <text
-            x={x} y={upper ? y - toothH / 2 - 7 : y + toothH / 2 + 15}
-            textAnchor="middle" fontSize="13" fontWeight="600" fill={LABEL}
-            fontFamily="system-ui, sans-serif"
-          >
-            {labels[tooth]}
-          </text>
-        </g>
-      );
-    })}
-  </g>
-);
 
 // Universal numbers, which is how the rest of this app stores a tooth. The
 // label map converts for display so the diagram agrees with the chart.
@@ -119,18 +184,32 @@ const Ruled = () => {
   return <g>{lines}</g>;
 };
 
-const Mouth = ({ teeth: [upper, lower], labels }) => (
-  <g>
-    <Arch teeth={upper} labels={labels} cx={WIDTH / 2} cy={HEIGHT / 2 - 34}
-      rx={WIDTH * 0.37} ry={HEIGHT * 0.26} upper toothW={46} toothH={62} />
-    <Arch teeth={lower} labels={labels} cx={WIDTH / 2} cy={HEIGHT / 2 + 34}
-      rx={WIDTH * 0.37} ry={HEIGHT * 0.26} upper={false} toothW={46} toothH={62} />
-    <text x={WIDTH / 2} y={HEIGHT / 2 + 6} textAnchor="middle" fontSize="12"
-      fill={LABEL} fontFamily="system-ui, sans-serif" letterSpacing="2">
-      RIGHT · LEFT
-    </text>
-  </g>
-);
+const Mouth = ({ child, teeth: [upper, lower], labels }) => {
+  // The two arches share a centre line with a gap between them for the
+  // RIGHT · LEFT marker. A child's mouth is drawn smaller, as it is.
+  const scale = child ? 0.82 : 1;
+  const common = {
+    cx: WIDTH / 2, rx: WIDTH * 0.4 * scale, ry: HEIGHT * 0.27 * scale,
+    t0: Math.PI * 0.06, t1: Math.PI * 0.94,
+  };
+  const widths = child ? CHILD_WIDTHS : ADULT_WIDTHS;
+  const height = child ? 56 : 58;
+  const posteriorCount = child ? 2 : 5;
+  return (
+    <g>
+      <Arch teeth={upper} widths={widths} labels={labels} height={height}
+        posteriorCount={posteriorCount}
+        geom={{ ...common, cy: HEIGHT / 2 - 34, upper: true }} />
+      <Arch teeth={lower} widths={widths} labels={labels} height={height}
+        posteriorCount={posteriorCount}
+        geom={{ ...common, cy: HEIGHT / 2 + 34, upper: false }} />
+      <text x={WIDTH / 2} y={HEIGHT / 2 + 5} textAnchor="middle" fontSize="12"
+        fill={LABEL} fontFamily="system-ui, sans-serif" letterSpacing="2">
+        RIGHT · LEFT
+      </text>
+    </g>
+  );
+};
 
 /**
  * @param {string} backdrop  one of BACKDROPS
@@ -150,7 +229,7 @@ const SketchBackdrop = ({ backdrop, toothLabel = (n) => n }) => {
   const labels = Object.fromEntries(
     teeth.flat().map((n) => [n, child ? n : toothLabel(n)])
   );
-  return <Mouth teeth={teeth} labels={labels} />;
+  return <Mouth child={child} teeth={teeth} labels={labels} />;
 };
 
 export default SketchBackdrop;

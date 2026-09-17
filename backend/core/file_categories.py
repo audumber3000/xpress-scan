@@ -39,6 +39,7 @@ IMAGING_CATEGORIES = (
 
 # Paperwork — everything that belongs on the Documents tab.
 DOCUMENT_CATEGORIES = (
+    'Notes',     # a clinician's pen notes, exported from a visit
     'Report',
     'Referral',
     'Estimate',

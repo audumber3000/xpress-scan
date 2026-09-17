@@ -1,110 +1,261 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { PenLine, ChevronDown, ChevronUp, Maximize2, Minimize2, Lock } from 'lucide-react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  PenLine, ChevronDown, ChevronUp, Maximize2, Minimize2, Lock, FileDown, Loader2, Check,
+} from 'lucide-react';
 import { universalToFDI } from '../../../utils/toothNumbering';
 import { useIsDentalPatient } from '../../../utils/casePaper';
 import SketchSurface from './SketchSurface';
 import SketchToolbar from './SketchToolbar';
+import SketchPages from './SketchPages';
 import { useSketchPad } from './useSketchPad';
-import { TOOLS, isSketchEmpty, strokeCount } from './sketchModel';
+import { HEIGHT, TOOLS, WIDTH, isSketchEmpty, strokeCount } from './sketchModel';
 
 /**
  * Pen notes for one visit.
  *
  * What this is for, in the clinician's words: "let me show you which tooth".
- * That conversation happens with a tablet turned around to face the patient,
- * and until now the only way to have it was to draw on the back of an envelope
- * — so the explanation that persuaded somebody to accept a treatment plan was
- * never part of their record.
+ * That conversation happens with a tablet turned to face the patient, and until
+ * now it happened on the back of an envelope — so the explanation that got a
+ * treatment plan accepted was never part of the record.
  *
- * It saves with the case paper, on the case paper's own date, so a note drawn
- * while back-entering a visit from June belongs to June.
+ * Saves with the case paper, on the case paper's own date. The HOST keys this
+ * component per case paper: a different paper is a fresh mount, which is how
+ * the pad knows the value it was given is a new document and not its own write
+ * coming back (see useSketchPad).
  *
- * ─── Why it is collapsed by default ──────────────────────────────────────────
- *
- * Most visits are not drawn on, and a canvas the height of the screen sitting
- * open above the clinical notes would push the rest of the case paper below the
- * fold for every visit that never needed it. Once there is ink on it, it opens
- * with the paper — because then it is part of the record and hiding it would be
- * hiding clinical content.
+ * Collapsed by default. Most visits are not drawn on, and an open canvas would
+ * push the rest of the paper below the fold for every one of them. Once there
+ * is ink, it opens with the paper — then it is clinical content.
  */
 
-const VisitSketchPad = ({ value, onChange, patient, disabled = false, blockedReason = '' }) => {
-  const isDental = useIsDentalPatient(patient);
+/**
+ * The largest 3:2 page that fits the room it is given.
+ *
+ * CSS `aspect-ratio` cannot do "fit inside" when both dimensions are
+ * constrained — the page either overflows the screen or letterboxes inside
+ * a box that is still the wrong shape. So it is measured.
+ */
+const FitPage = ({ children }) => {
+  const boxRef = useRef(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
 
-  // Opened when there is something to see. `useState` initialiser, not an
-  // effect: an effect would flash the collapsed state first on every paper that
-  // has a drawing, which reads as the note having been lost.
+  useLayoutEffect(() => {
+    const el = boxRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (!width || !height) return;
+      const ratio = WIDTH / HEIGHT;
+      const w = Math.min(width, height * ratio);
+      setSize({ w: Math.floor(w), h: Math.floor(w / ratio) });
+    };
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    window.addEventListener('orientationchange', measure);
+    return () => { ro?.disconnect(); window.removeEventListener('orientationchange', measure); };
+  }, []);
+
+  return (
+    <div ref={boxRef} className="flex min-h-0 flex-1 items-center justify-center">
+      {size.w > 0 && (
+        <div
+          className="overflow-hidden rounded-xl border border-gray-300 bg-white"
+          style={{ width: size.w, height: size.h }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** Every page as standalone SVG markup, for the server to build a PDF from. */
+const pagesAsSvg = async (pages, toothLabel) => {
+  // Loaded on demand: the server renderer is only needed at the moment of
+  // export, and it has no business in the bundle every visit loads.
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  return pages.map((p) => renderToStaticMarkup(
+    <SketchSurface page={p} readOnly toothLabel={toothLabel} />,
+  ));
+};
+
+const ExportButton = ({ onClick, state }) => {
+  const busy = state === 'busy';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title="Download these notes as a PDF and file them under Documents"
+      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60"
+    >
+      {busy ? <Loader2 size={15} className="animate-spin" />
+        : state === 'done' ? <Check size={15} className="text-emerald-600" />
+          : <FileDown size={15} />}
+      {busy ? 'Preparing…' : state === 'done' ? 'Saved' : 'Save as PDF'}
+    </button>
+  );
+};
+
+const VisitSketchPad = ({
+  value, onChange, patient, disabled = false, blockedReason = '', onExport,
+}) => {
+  const isDental = useIsDentalPatient(patient);
   const [open, setOpen] = useState(() => !isSketchEmpty(value));
   const [full, setFull] = useState(false);
+  // idle → busy → done | error. Said at the control, not in a toast: the
+  // clinician is looking at the button they just pressed.
+  const [exportState, setExportState] = useState('idle');
+  const [exportMessage, setExportMessage] = useState('');
 
   const pad = useSketchPad({ value, onChange, disabled });
 
-  // FDI, the same as the tooth drawer and the treatment plan. Stored Universal
-  // and displayed FDI everywhere in this app, so the tooth a doctor circles on
-  // the diagram is the tooth the chart two tabs away calls it.
+  // FDI, the same as the tooth drawer and the treatment plan: the tooth a
+  // doctor circles here is the tooth the chart two tabs away calls it.
   const toothLabel = useCallback((n) => universalToFDI(n), []);
 
-  const cursor = pad.tool === TOOLS.ERASER ? 'cell' : 'crosshair';
   const count = useMemo(() => strokeCount(pad.sketch), [pad.sketch]);
-
-  // A dermatology or general clinic has no tooth chart, so it opens on a plain
-  // page instead of an arch nobody there will draw on.
   const summary = count > 0
     ? `${pad.pageCount} page${pad.pageCount === 1 ? '' : 's'} · ${count} mark${count === 1 ? '' : 's'}`
-    : isDental
-      ? 'Draw on a tooth chart to explain the plan'
-      : 'Sketch a note for this visit';
+    : isDental ? 'Draw on a tooth chart to explain the plan' : 'Sketch a note for this visit';
 
-  const body = (
-    <div className={full ? 'flex h-full flex-col gap-3' : 'space-y-3'}>
-      {!disabled && <SketchToolbar {...pad} />}
-      <div
-        className={`overflow-hidden rounded-xl border border-gray-200 bg-white ${
-          full ? 'min-h-0 flex-1' : ''
-        }`}
-        style={full ? undefined : { aspectRatio: '3 / 2' }}
-      >
-        <SketchSurface
-          page={pad.page}
-          strokes={pad.pageStrokes}
-          simulatePressure={pad.simulatePressure}
-          toothLabel={toothLabel}
-          disabled={disabled}
-          cursor={cursor}
-          surfaceRef={pad.surfaceRef}
-          onPointerDown={pad.onPointerDown}
-          onPointerMove={pad.onPointerMove}
-          endStroke={pad.endStroke}
-        />
-      </div>
-      {!disabled && (
-        <p className="text-[11px] leading-snug text-gray-400">
-          Draw with a stylus or a finger. Once you have used a pen on this screen,
-          resting your hand on it stops drawing, so you can write as you would on paper.
-        </p>
-      )}
-    </div>
+  // ── Full screen ─────────────────────────────────────────────────────────
+  // The overlay is the full screen. The browser's own full-screen mode is
+  // asked for on top, where it exists, so a tablet loses its address bar too —
+  // and if the clinician leaves that with the system gesture, the overlay
+  // leaves with it rather than stranding them in half a mode.
+  const enterFull = () => {
+    setFull(true);
+    const el = document.documentElement;
+    if (el.requestFullscreen && !document.fullscreenElement) {
+      el.requestFullscreen().catch(() => { /* refused or unsupported: overlay alone is fine */ });
+    }
+  };
+  const exitFull = useCallback(() => {
+    setFull(false);
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!full) return undefined;
+    const onFs = () => { if (!document.fullscreenElement) setFull(false); };
+    const onKey = (e) => { if (e.key === 'Escape') exitFull(); };
+    document.addEventListener('fullscreenchange', onFs);
+    window.addEventListener('keydown', onKey);
+    // The page behind must not scroll when a palm drags across the overlay.
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('fullscreenchange', onFs);
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [full, exitFull]);
+
+  // ── Export ──────────────────────────────────────────────────────────────
+  const doneTimer = useRef(null);
+  useEffect(() => () => clearTimeout(doneTimer.current), []);
+
+  const handleExport = async () => {
+    if (!onExport) return;
+    if (count === 0) {
+      setExportState('error');
+      setExportMessage('Nothing is drawn yet, so there is nothing to export.');
+      return;
+    }
+    setExportState('busy');
+    setExportMessage('');
+    try {
+      // Only pages with something on them. A blank page in a clinical PDF is
+      // a sheet somebody has to wonder about.
+      const drawn = pad.pages.filter((p) => p.strokes.length > 0);
+      const svgs = await pagesAsSvg(drawn, toothLabel);
+      const result = await onExport(svgs);
+      setExportState('done');
+      setExportMessage(result?.saved === false
+        ? 'Downloaded. It could not be filed under Documents — try again, or upload the PDF there yourself.'
+        : 'Downloaded, and filed under Documents.');
+      clearTimeout(doneTimer.current);
+      doneTimer.current = setTimeout(() => setExportState('idle'), 4000);
+    } catch (err) {
+      setExportState('error');
+      setExportMessage(err?.message || 'The PDF could not be made. Please try again.');
+    }
+  };
+
+  const exportButton = onExport && !disabled
+    ? <ExportButton onClick={handleExport} state={exportState} />
+    : null;
+
+  const surface = (
+    <SketchSurface
+      page={pad.page}
+      live={pad.live}
+      toothLabel={toothLabel}
+      disabled={disabled}
+      cursor={pad.tool === TOOLS.ERASER ? 'cell' : 'crosshair'}
+      surfaceRef={pad.surfaceRef}
+      onPointerDown={pad.onPointerDown}
+      onPointerMove={pad.onPointerMove}
+      endStroke={pad.endStroke}
+    />
+  );
+
+  const pages = (
+    <SketchPages
+      pages={pad.pages}
+      pageIndex={pad.pageIndex}
+      setPageIndex={pad.setPageIndex}
+      addPage={pad.addPage}
+      removePage={pad.removePage}
+      toothLabel={toothLabel}
+      disabled={disabled}
+      compact={!full}
+    />
+  );
+
+  const exportNote = exportMessage && (
+    <p className={`text-xs leading-snug ${exportState === 'error' ? 'text-red-600' : 'text-gray-500'}`}>
+      {exportMessage}
+    </p>
   );
 
   if (full) {
     return (
-      <div className="fixed inset-0 z-[95] flex flex-col gap-3 bg-[#f8fafc] p-4">
-        <div className="flex shrink-0 items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
+      <div
+        className="fixed inset-0 z-[95] flex flex-col gap-3 bg-gray-100 p-3 sm:p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Pen notes, full screen"
+        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+      >
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <PenLine size={17} className="shrink-0 text-[#2a276e]" />
             <h3 className="truncate text-sm font-bold text-gray-900">
-              Pen notes{patient?.name ? ` — ${patient.name}` : ''}
+              Pen notes{patient?.name ? ` · ${patient.name}` : ''}
             </h3>
+            <span className="hidden text-xs text-gray-500 sm:inline">
+              Page {pad.pageIndex + 1} of {pad.pageCount}
+            </span>
           </div>
+          {exportButton}
           <button
             type="button"
-            onClick={() => setFull(false)}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            onClick={exitFull}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#2a276e] px-4 text-sm font-semibold text-white transition-[background-color,transform] hover:bg-[#1a1548] active:scale-[0.97]"
           >
             <Minimize2 size={15} /> Done
           </button>
         </div>
-        {body}
+
+        {!disabled && <SketchToolbar {...pad} />}
+        {exportNote}
+        <FitPage>{surface}</FitPage>
+        <div className="shrink-0 rounded-xl border border-gray-200 bg-white px-2 py-1.5">{pages}</div>
       </div>
     );
   }
@@ -127,15 +278,14 @@ const VisitSketchPad = ({ value, onChange, patient, disabled = false, blockedRea
           </span>
         </button>
 
-        {open && !disabled && (
+        {!disabled && (
           <button
             type="button"
-            onClick={() => setFull(true)}
-            title="Fill the screen"
-            aria-label="Fill the screen"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800"
+            onClick={() => { setOpen(true); enterFull(); }}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
           >
-            <Maximize2 size={15} />
+            <Maximize2 size={14} />
+            <span className="hidden sm:inline">Full screen</span>
           </button>
         )}
         <button
@@ -149,14 +299,25 @@ const VisitSketchPad = ({ value, onChange, patient, disabled = false, blockedRea
       </div>
 
       {open && (
-        <div className="border-t border-gray-100 p-4">
+        <div className="space-y-3 border-t border-gray-100 p-4">
           {disabled && blockedReason && (
-            <p className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900">
+            <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900">
               <Lock size={13} className="mt-px shrink-0 text-amber-600" />
               {blockedReason}
             </p>
           )}
-          {body}
+          {!disabled && <SketchToolbar {...pad} trailing={exportButton} />}
+          {exportNote}
+          <div className="overflow-hidden rounded-xl border border-gray-300 bg-white" style={{ aspectRatio: '3 / 2' }}>
+            {surface}
+          </div>
+          {pages}
+          {!disabled && (
+            <p className="text-[11px] leading-snug text-gray-400">
+              Draw with a stylus or a finger. Once a pen has touched the screen, resting
+              your hand on it stops drawing, so you can write as you would on paper.
+            </p>
+          )}
         </div>
       )}
     </div>

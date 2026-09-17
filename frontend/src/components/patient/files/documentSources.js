@@ -25,6 +25,7 @@ export const CATEGORIES = [
   { key: 'report', label: 'Reports' },
   { key: 'invoice', label: 'Invoices' },
   { key: 'form', label: 'Patient Forms' },
+  { key: 'notes', label: 'Pen Notes' },
   { key: 'upload', label: 'Uploads' },
 ];
 
@@ -36,8 +37,17 @@ export const CATEGORY_STYLE = {
   report: 'bg-blue-50 text-blue-700',
   invoice: 'bg-amber-50 text-amber-700',
   form: 'bg-violet-50 text-violet-700',
+  notes: 'bg-rose-50 text-rose-700',
   upload: 'bg-gray-100 text-gray-600',
 };
+
+// Which filter chip a hand-filed upload belongs under. The upload's stored
+// category is the clinic's word ('Report', 'Notes'); the chips are keyed in
+// lower case. Passing the stored word straight through matched no chip at all,
+// so a report filed by hand appeared under "All" and nowhere else, labelled
+// "File". Anything without a chip of its own stays under Uploads.
+const UPLOAD_CHIP = { report: 'report', consent: 'consent', notes: 'notes' };
+const chipFor = (stored) => UPLOAD_CHIP[String(stored || '').trim().toLowerCase()] || 'upload';
 
 const safe = (promise) => promise.then((r) => (Array.isArray(r) ? r : [])).catch(() => []);
 
@@ -85,7 +95,7 @@ export async function fetchPatientDocuments(patientId, { prescriptions = [], inv
       id: d.id,
       // An upload can say what it is now that the column exists. Everything
       // stored before it lands under Uploads rather than guessing.
-      category: d.category && d.category !== 'other' ? d.category : 'upload',
+      category: chipFor(d.category),
       title: d.file_name,
       date: d.created_at,
       url: d.file_path,

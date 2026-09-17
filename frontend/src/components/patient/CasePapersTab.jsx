@@ -170,6 +170,12 @@ const CasePapersTab = ({
 
   const [visitPrescriptions, setVisitPrescriptions] = useState([]);
 
+  // Which opening of a case paper this is. The pen pad is keyed on it, so it
+  // starts fresh only when a DIFFERENT paper is opened. Keying on the paper's id
+  // instead would remount it — losing the page you were on and your undo — the
+  // moment an auto-save turned 'new-…' into a real id mid-drawing.
+  const [sketchSession, setSketchSession] = useState(0);
+
   const openCasePaper = useCallback((paper) => {
     const pills = (val) => {
       if (Array.isArray(val)) return val;
@@ -179,6 +185,7 @@ const CasePapersTab = ({
       return typeof val === 'string' && val.trim() ? [val] : [];
     };
     setSelectedCasePaper(paper);
+    setSketchSession((n) => n + 1);
     setForm({
       date: paper.date || new Date().toISOString(),
       chief_complaint: pills(paper.chief_complaint),
@@ -376,6 +383,57 @@ const CasePapersTab = ({
     return saved.id;
   };
 
+  /**
+   * Pen notes → PDF, downloaded and filed under Documents.
+   *
+   * A brand-new paper is saved first: a document has to hang off a real case
+   * paper. The pages arrive as SVG and the server rebuilds them from an
+   * allowlist before rendering — see backend/domains/clinical/sketch_pdf.py.
+   * Returns whether it was filed, so the pad can say so at the button.
+   */
+  const handleExportSketch = async (svgPages) => {
+    const paperId = await ensureCasePaperSaved();
+    if (!paperId || String(paperId).startsWith('new-')) {
+      throw new Error('Save the case paper first, then export its notes.');
+    }
+    const baseURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+    const res = await fetch(`${baseURL}/api/v1/clinical/case-papers/${paperId}/sketch-pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+      },
+      body: JSON.stringify({ pages: svgPages, save: true }),
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json())?.detail; } catch { /* not JSON */ }
+      throw new Error(typeof detail === 'string' && detail
+        ? detail
+        : res.status === 403 ? 'Only clinical staff can export pen notes.'
+          : res.status === 402 ? 'Your plan has stopped, so new documents cannot be made.'
+            : 'The PDF could not be made. Please try again.');
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (res.headers.get('content-disposition') || '').match(/filename="?([^"]+)"?/)?.[1]
+      || 'pen-notes.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoked on the next tick: Safari cancels a download whose URL is revoked
+    // in the same task that started it.
+    setTimeout(() => window.URL.revokeObjectURL(url), 0);
+
+    const savedHeader = res.headers.get('x-document-saved');
+    if (savedHeader === 'true') fetchPatientDocuments();
+    // A header the browser would not expose is "unknown", not "failed".
+    return { saved: savedHeader === null ? undefined : savedHeader === 'true' };
+  };
+
   const handleAutoSaveForDrawer = async (openCallback) => {
     try {
       await ensureCasePaperSaved();
@@ -555,6 +613,7 @@ const CasePapersTab = ({
           sketches: null
       });
       setSelectedCasePaper(newPaper);
+      setSketchSession((n) => n + 1);
       setSessionPerioChart(normaliseChart(null));
       selection.clear();
       setLabOrders([]);
@@ -1159,6 +1218,8 @@ const CasePapersTab = ({
              open canvas would push the rest of the paper below the fold for
              every one of them. */}
         <VisitSketchPad
+          key={sketchSession}
+          onExport={handleExportSketch}
           value={form.sketches}
           onChange={(sketches) => handleFormChange({ ...form, sketches })}
           patient={patientData}

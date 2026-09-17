@@ -1,7 +1,6 @@
 import React from 'react';
 import {
-  Pen, Highlighter, Eraser, Undo2, Redo2, Trash2, Plus, ChevronLeft,
-  ChevronRight, LayoutGrid,
+  Pen, Highlighter, Eraser, Undo2, Redo2, LayoutGrid,
 } from 'lucide-react';
 import { BACKDROPS, COLORS, SIZES, TOOLS } from './sketchModel';
 
@@ -43,7 +42,7 @@ const Divider = () => <span className="mx-0.5 h-7 w-px shrink-0 bg-gray-200" ari
 const SketchToolbar = ({
   tool, setTool, color, setColor, size, setSize,
   undo, redo, canUndo, canRedo, clearPage,
-  page, setBackdrop, pageIndex, pageCount, setPageIndex, addPage, removePage,
+  page, setBackdrop, trailing = null,
 }) => (
   <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-gray-200 bg-white p-2">
     <Btn active={tool === TOOLS.PEN} onClick={() => setTool(TOOLS.PEN)} title="Pen (P)">
@@ -105,7 +104,16 @@ const SketchToolbar = ({
 
     <Btn onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)"><Undo2 size={17} /></Btn>
     <Btn onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)"><Redo2 size={17} /></Btn>
-    <Btn onClick={clearPage} danger title="Clear this page"><Trash2 size={16} /></Btn>
+    {/* Words, not an icon: a bin sits beside the page thumbnails meaning
+        "delete the page", and an eraser glyph here would read as the tool. */}
+    <button
+      type="button"
+      onClick={clearPage}
+      title="Wipe everything drawn on this page"
+      className="inline-flex h-10 shrink-0 items-center rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+    >
+      Clear page
+    </button>
 
     <Divider />
 
@@ -123,21 +131,8 @@ const SketchToolbar = ({
       </select>
     </label>
 
-    <div className="ml-auto flex items-center gap-1.5">
-      <Btn onClick={() => setPageIndex(pageIndex - 1)} disabled={pageIndex === 0} title="Previous page">
-        <ChevronLeft size={17} />
-      </Btn>
-      <span className="min-w-[4.5rem] text-center text-xs font-bold text-gray-500">
-        Page {pageIndex + 1} of {pageCount}
-      </span>
-      <Btn onClick={() => setPageIndex(pageIndex + 1)} disabled={pageIndex >= pageCount - 1} title="Next page">
-        <ChevronRight size={17} />
-      </Btn>
-      <Btn onClick={addPage} title="Add a page"><Plus size={17} /></Btn>
-      <Btn onClick={removePage} danger title={pageCount > 1 ? 'Delete this page' : 'Clear this page'}>
-        <Trash2 size={16} />
-      </Btn>
-    </div>
+    {/* Whatever the host wants on the far right: Save as PDF, Done. */}
+    {trailing && <div className="ml-auto flex items-center gap-1.5">{trailing}</div>}
   </div>
 );
 

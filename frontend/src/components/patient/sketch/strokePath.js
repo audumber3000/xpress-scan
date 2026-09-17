@@ -48,17 +48,34 @@ const OPTIONS = {
  * the dead-wire look again — so for those the library infers pressure from how
  * fast the pointer moved, which is a very good approximation of how hard
  * somebody would have pressed.
+ *
+ * Read off the stroke (`sim`), which is where the pad records what kind of
+ * pointer drew it, so the same note renders identically everywhere.
  */
-export const strokeOutline = (stroke, { simulatePressure = false } = {}) =>
+export const strokeOutline = (stroke) =>
   getStroke(stroke.points, {
     size: stroke.size,
-    simulatePressure,
+    simulatePressure: stroke.sim !== false,
     ...(OPTIONS[stroke.tool] || OPTIONS[TOOLS.PEN]),
   });
 
+// Computed paths, per stroke object. A committed stroke never changes — every
+// edit produces a new object — so its outline is worked out once. Without this
+// each pen sample re-ran the geometry for every stroke already on the page,
+// and a busy page lagged behind the nib.
+const pathCache = new WeakMap();
+
 /** The outline as an SVG path. Empty string for a stroke with nothing in it. */
-export const strokeToPath = (stroke, opts) => {
-  const outline = strokeOutline(stroke, opts);
+export const strokeToPath = (stroke) => {
+  const cached = pathCache.get(stroke);
+  if (cached !== undefined) return cached;
+  const d = buildPath(stroke);
+  pathCache.set(stroke, d);
+  return d;
+};
+
+const buildPath = (stroke) => {
+  const outline = strokeOutline(stroke);
   if (!outline.length) return '';
 
   // Quadratic segments through the midpoints — the shape is a closed polygon

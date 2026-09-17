@@ -7,55 +7,62 @@ import { strokeOpacity, strokeToPath } from './strokePath';
  * The page itself: diagram underneath, ink on top.
  *
  * One SVG at a fixed viewBox, scaled by CSS to whatever room it has. Everything
- * stored is in that coordinate space, so a note drawn on a phone opens
- * identically on a 13" tablet and prints at full resolution — which an
- * `<img>` of a rasterised canvas cannot do.
+ * stored is in that coordinate space, so a note drawn on a phone opens the same
+ * on a 13" tablet and prints at full resolution.
+ *
+ * Three layers, and the split is what keeps the ink up with the nib:
+ *   backdrop   — memoised on the paper type; never redraws while writing
+ *   committed  — memoised on the stroke list; redraws only when a stroke lands
+ *   live       — the one stroke under the pen, redrawn every sample
  *
  * `touchAction: none` is not optional. Without it the browser claims the
  * gesture for scrolling and the pen draws a short line before the page starts
- * moving under it, which on a tablet makes the whole surface feel broken.
+ * moving under it.
  */
 
-const Ink = memo(({ strokes, simulatePressure }) => (
-  <g>
-    {strokes.map((s) => (
-      <path
-        key={s.id}
-        d={strokeToPath(s, { simulatePressure })}
-        fill={s.color}
-        opacity={strokeOpacity(s)}
-        // The ink is a filled outline, not a stroked line — see strokePath.
-        // Rounding the joins keeps a fast scribble from showing hard corners
-        // where the outline doubles back on itself.
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    ))}
-  </g>
-));
-Ink.displayName = 'Ink';
+const Stroke = ({ stroke }) => (
+  <path d={strokeToPath(stroke)} fill={stroke.color} opacity={strokeOpacity(stroke)} />
+);
 
+const Committed = memo(({ strokes }) => (
+  <g>{strokes.map((s) => <Stroke key={s.id} stroke={s} />)}</g>
+));
+Committed.displayName = 'Committed';
+
+const Backdrop = memo(SketchBackdrop);
+
+/**
+ * `readOnly` draws the page without listening to anything — the page strip's
+ * thumbnails and anywhere else a note is shown rather than written on.
+ */
 const SketchSurface = ({
-  page, strokes, simulatePressure, toothLabel, disabled,
-  surfaceRef, onPointerDown, onPointerMove, endStroke, cursor,
+  page, live = null, toothLabel, readOnly = false, disabled = false,
+  surfaceRef, onPointerDown, onPointerMove, endStroke, cursor, className = '',
 }) => (
   <svg
-    ref={surfaceRef}
+    ref={readOnly ? undefined : surfaceRef}
     viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
     preserveAspectRatio="xMidYMid meet"
     role="img"
-    aria-label="Pen notes for this visit"
-    className="block h-full w-full select-none rounded-xl bg-white"
-    style={{ touchAction: 'none', cursor: disabled ? 'default' : cursor }}
-    onPointerDown={onPointerDown}
-    onPointerMove={onPointerMove}
-    onPointerUp={endStroke}
-    onPointerCancel={endStroke}
-    onPointerLeave={endStroke}
+    aria-label={readOnly ? 'Pen notes page' : 'Pen notes for this visit — draw here'}
+    className={`block h-full w-full select-none ${className}`}
+    style={readOnly
+      ? { pointerEvents: 'none' }
+      : { touchAction: 'none', cursor: disabled ? 'default' : cursor, WebkitUserSelect: 'none' }}
+    {...(readOnly ? {} : {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: endStroke,
+      onPointerCancel: endStroke,
+      onLostPointerCapture: endStroke,
+      // A long press on iPad opens the callout/magnifier over the canvas.
+      onContextMenu: (e) => e.preventDefault(),
+    })}
   >
     <rect x="0" y="0" width={WIDTH} height={HEIGHT} fill="#ffffff" />
-    <SketchBackdrop backdrop={page.backdrop} toothLabel={toothLabel} />
-    <Ink strokes={strokes} simulatePressure={simulatePressure} />
+    <Backdrop backdrop={page.backdrop} toothLabel={toothLabel} />
+    <Committed strokes={page.strokes} />
+    {live && <Stroke stroke={live} />}
   </svg>
 );
 

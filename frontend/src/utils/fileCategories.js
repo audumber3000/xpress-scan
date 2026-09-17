@@ -14,7 +14,7 @@ export const IMAGING_CATEGORIES = [
 ];
 
 export const DOCUMENT_CATEGORIES = [
-  'Report', 'Referral', 'Estimate', 'Insurance', 'Consent', 'Other',
+  'Notes', 'Report', 'Referral', 'Estimate', 'Insurance', 'Consent', 'Other',
 ];
 
 // What older builds send. Kept because an installed tablet keeps sending its
