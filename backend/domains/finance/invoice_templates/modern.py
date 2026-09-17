@@ -23,6 +23,7 @@ from domains.infrastructure.services.pdf_fields import (
     apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
+from domains.finance.invoice_templates.payment_block import render_payment_block
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -188,6 +189,11 @@ def render_invoice(invoice, clinic, config=None) -> str:
     # Concessions granted after issue are already inside `discount` above; this
     # itemises them so the patient can see why the total changed.
     discount_block = render_discount_block(invoice, currency=currency, accent=primary_color) if vis.discount else ''
+    # What has actually been paid against this bill. Unlike the discount
+    # block this is not behind a visibility flag: a patient holding an
+    # invoice is entitled to see what they have already given the clinic,
+    # and it prints nothing at all on a bill with no payments against it.
+    payment_block = render_payment_block(invoice, currency=currency, accent=primary_color)
     if is_india:
         half = inv_tax / 2 if inv_tax > 0 else 0
         cgst_row = f'<tr><td>CGST 9%</td><td>{currency} {half:,.2f}</td></tr>' if half else ''
@@ -400,6 +406,7 @@ body {{
   </div>
 
   {discount_block}
+  {payment_block}
 
   <!-- ITEMS -->
   <table class="items">

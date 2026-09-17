@@ -24,6 +24,7 @@ from domains.finance.invoice_templates._common import (
 from domains.infrastructure.services.pdf_fields import page_css
 from domains.finance.invoice_templates.classic import _amount_in_words
 from domains.finance.invoice_templates.discount_block import render_discount_block
+from domains.finance.invoice_templates.payment_block import render_payment_block
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -162,6 +163,7 @@ table.items tr.grand td {{ border-top:1px solid #111827; border-bottom:1px solid
 {f'<div class="aow">{aow}</div>' if aow else ''}
 
 {render_discount_block(invoice, d.currency, d.primary)}
+{render_payment_block(invoice, d.currency, d.primary)}
 
 {f'<div class="notes"><div class="lbl">Notes</div>{d.notes}</div>' if d.notes else ''}
 

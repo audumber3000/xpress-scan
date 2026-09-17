@@ -17,6 +17,7 @@ from domains.infrastructure.services.pdf_fields import (
     page_css,
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
+from domains.finance.invoice_templates.payment_block import render_payment_block
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -164,6 +165,7 @@ table.items td.c {{ text-align:center; width:50px; }}
   </tr></table>
 
   {render_discount_block(invoice, currency=d.currency, accent=d.primary) if d.vis.discount else ''}
+  {render_payment_block(invoice, currency=d.currency, accent=d.primary)}
 
   <div class="thanks">
     {f'If you have any questions about this invoice, please contact {d.clinic.name}' + (f' on {d.clinic.phone}' if d.clinic.phone else '') + '.' if d.clinic.name else 'If you have any questions about this invoice, please contact us.'}<br>

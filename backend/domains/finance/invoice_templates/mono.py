@@ -16,6 +16,7 @@ from domains.infrastructure.services.pdf_fields import (
     page_css,
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
+from domains.finance.invoice_templates.payment_block import render_payment_block
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -149,6 +150,7 @@ table.items tr.grand td {{ background:#f2f2f2; font-weight:700; font-size:13px; 
   </table>
 
   {render_discount_block(invoice, currency=d.currency, accent='#000000') if d.vis.discount else ''}
+  {render_payment_block(invoice, currency=d.currency, accent='#000000')}
 
   <div class="terms">
     <div class="lbl">Terms &amp; Conditions</div>
