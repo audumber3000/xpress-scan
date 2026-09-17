@@ -57,9 +57,13 @@ const changedPageIndex = (a, b) => {
  *
  *   One Undo per eraser sweep, however many strokes it takes.
  */
-export function useSketchPad({ value, onChange, disabled = false }) {
+export function useSketchPad({
+  value, onChange, disabled = false, defaultBackdrop = 'adult-chart', shortcuts = true,
+}) {
   const initial = useRef(null);
-  if (initial.current === null) initial.current = normaliseSketch(value) || emptySketch();
+  if (initial.current === null) {
+    initial.current = normaliseSketch(value) || emptySketch(defaultBackdrop);
+  }
 
   const noteRef = useRef(initial.current);
   const [note, setNote] = useState(initial.current);
@@ -301,8 +305,11 @@ export function useSketchPad({ value, onChange, disabled = false }) {
   }, [apply, clearPage, setPageIndex]);
 
   // ── Keyboard, for the clinicians on a laptop ────────────────────────────
+  // Only while the pad is on screen. Listening whenever the case paper was open
+  // meant Ctrl+Z anywhere on the paper undid a drawing hidden in a collapsed
+  // panel — an edit the clinician could neither see nor had asked for.
   useEffect(() => {
-    if (disabled) return undefined;
+    if (disabled || !shortcuts) return undefined;
     const onKey = (e) => {
       const t = e.target;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName) || t?.isContentEditable) return;
@@ -317,7 +324,7 @@ export function useSketchPad({ value, onChange, disabled = false }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [disabled, undo, redo]);
+  }, [disabled, shortcuts, undo, redo]);
 
   const safeIndex = Math.min(pageIndex, note.pages.length - 1);
   const page = note.pages[safeIndex];

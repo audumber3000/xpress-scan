@@ -576,7 +576,7 @@ const CasePapersTab = ({
     })();
 
     const ok = window.confirm(
-      `Delete this case paper?\n\n"${title}" — ${formatDate(paper.date)}\n\n` +
+      `Delete this case paper?\n\n"${title}", ${formatDate(paper.date)}\n\n` +
       'This permanently removes the clinical record and cannot be undone.'
     );
     if (!ok) return;

@@ -71,7 +71,7 @@ def render_payment_block(invoice, currency='₹', accent='#6B7280', settled_acce
     edge = settled_accent if settled else accent
     heading = (
         'Paid in full' if settled
-        else f'Part paid — {count} payment{"s" if count != 1 else ""} received'
+        else f'Part paid: {count} payment{"s" if count != 1 else ""} received'
     )
     due_line = (
         f'<tr><td style="padding:3px 8px 0 0; font-weight:700;">Balance due</td>'

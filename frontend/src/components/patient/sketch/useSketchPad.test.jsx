@@ -13,11 +13,12 @@ import { TOOLS } from './sketchModel';
  * it, the new value comes back down as a prop — and the pad has to know that
  * this is its own write returning, not a different case paper being opened.
  */
-function Harness({ onPad, initial = null }) {
+function Harness({ onPad, initial = null, options = {} }) {
   const [form, setForm] = useState({ sketches: initial });
   const pad = useSketchPad({
     value: form.sketches,
     onChange: (sketches) => setForm((f) => ({ ...f, sketches })),
+    ...options,
   });
   // A stand-in for the <svg>: 1200×800 on screen, so screen pixels are
   // logical units and the arithmetic in these tests is readable.
@@ -36,7 +37,7 @@ afterEach(() => {
   roots.splice(0).forEach(({ root, el }) => { act(() => root.unmount()); el.remove(); });
 });
 
-const mount = (initial) => {
+const mount = (initial, options) => {
   const box = {};
   const el = document.createElement('div');
   document.body.appendChild(el);
@@ -45,7 +46,7 @@ const mount = (initial) => {
   act(() => {
     root.render(
       <StrictMode>
-        <Harness initial={initial} onPad={(pad, form) => { box.pad = pad; box.form = form; }} />
+        <Harness initial={initial} options={options} onPad={(pad, form) => { box.pad = pad; box.form = form; }} />
       </StrictMode>,
     );
   });
@@ -224,5 +225,49 @@ describe('opening a note that was saved', () => {
     expect(box.pad.pageCount).toBe(2);
     expect(box.pad.pageIndex).toBe(0);
     expect(box.pad.canUndo).toBe(false);
+  });
+});
+
+describe('the paper a new note starts on', () => {
+  it('is whatever the host asks for', () => {
+    expect(mount(null, { defaultBackdrop: 'blank' }).pad.page.backdrop).toBe('blank');
+    expect(mount(null, { defaultBackdrop: 'child-chart' }).pad.page.backdrop).toBe('child-chart');
+  });
+
+  it('never overrides the paper a saved note was drawn on', () => {
+    const saved = { v: 1, pages: [{ id: 'p', backdrop: 'grid', strokes: [] }] };
+    expect(mount(saved, { defaultBackdrop: 'blank' }).pad.page.backdrop).toBe('grid');
+  });
+
+  it('carries on to the next page', () => {
+    const box = mount(null, { defaultBackdrop: 'ruled' });
+    act(() => box.pad.addPage());
+    expect(box.pad.page.backdrop).toBe('ruled');
+  });
+});
+
+describe('keyboard shortcuts', () => {
+  const press = (key, mods = {}) => act(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...mods }));
+  });
+
+  it('work while the pad is on screen', () => {
+    const box = mount(null, { shortcuts: true });
+    press('e');
+    expect(box.pad.tool).toBe(TOOLS.ERASER);
+    draw(box, [[10, 10], [20, 20]]);   // an eraser pass over nothing
+    press('p');
+    draw(box, [[10, 10], [20, 20]]);
+    press('z', { ctrlKey: true });
+    expect(box.pad.sketch.pages[0].strokes).toHaveLength(0);
+  });
+
+  it('do nothing while it is collapsed — Ctrl+Z must not undo a hidden drawing', () => {
+    const box = mount(null, { shortcuts: false });
+    draw(box, [[10, 10], [20, 20]]);
+    press('z', { ctrlKey: true });
+    press('e');
+    expect(box.pad.sketch.pages[0].strokes).toHaveLength(1);
+    expect(box.pad.tool).toBe(TOOLS.PEN);
   });
 });

@@ -8,7 +8,20 @@ import SketchSurface from './SketchSurface';
 import SketchToolbar from './SketchToolbar';
 import SketchPages from './SketchPages';
 import { useSketchPad } from './useSketchPad';
-import { HEIGHT, TOOLS, WIDTH, isSketchEmpty, strokeCount } from './sketchModel';
+import { BACKDROPS, HEIGHT, TOOLS, WIDTH, strokeCount } from './sketchModel';
+
+// A dental record gets the arch; everybody else gets paper. A skin clinic
+// opening a pen note onto a tooth chart is a screen that was not built for it.
+const TOOTH_BACKDROPS = new Set(['adult-chart', 'child-chart']);
+
+/** Which paper a new note starts on, for this patient. */
+const startingPaper = (isDental, patient) => {
+  if (!isDental) return 'blank';
+  // A full primary dentition until about six. Older children have permanent
+  // molars and incisors coming in, and the adult arch is the closer drawing.
+  const age = Number(patient?.age);
+  return Number.isFinite(age) && age > 0 && age < 6 ? 'child-chart' : 'adult-chart';
+};
 
 /**
  * Pen notes for one visit.
@@ -23,9 +36,10 @@ import { HEIGHT, TOOLS, WIDTH, isSketchEmpty, strokeCount } from './sketchModel'
  * the pad knows the value it was given is a new document and not its own write
  * coming back (see useSketchPad).
  *
- * Collapsed by default. Most visits are not drawn on, and an open canvas would
- * push the rest of the paper below the fold for every one of them. Once there
- * is ink, it opens with the paper — then it is clinical content.
+ * Always starts collapsed, drawn on or not — the same rule as every section in
+ * Control Center. A canvas that opens itself pushes the rest of the case paper
+ * below the fold. What is on it is still visible without opening it: the header
+ * carries the first page as a thumbnail and says how much is drawn.
  */
 
 /**
@@ -102,23 +116,35 @@ const VisitSketchPad = ({
   value, onChange, patient, disabled = false, blockedReason = '', onExport,
 }) => {
   const isDental = useIsDentalPatient(patient);
-  const [open, setOpen] = useState(() => !isSketchEmpty(value));
+  const [open, setOpen] = useState(false);
   const [full, setFull] = useState(false);
   // idle → busy → done | error. Said at the control, not in a toast: the
   // clinician is looking at the button they just pressed.
   const [exportState, setExportState] = useState('idle');
   const [exportMessage, setExportMessage] = useState('');
 
-  const pad = useSketchPad({ value, onChange, disabled });
+  const pad = useSketchPad({
+    value, onChange, disabled,
+    defaultBackdrop: startingPaper(isDental, patient),
+    // Keyboard shortcuts only while the pad can be seen — see useSketchPad.
+    shortcuts: open || full,
+  });
+  const backdrops = useMemo(
+    () => (isDental ? BACKDROPS : BACKDROPS.filter((b) => !TOOTH_BACKDROPS.has(b.key))),
+    [isDental],
+  );
 
   // FDI, the same as the tooth drawer and the treatment plan: the tooth a
   // doctor circles here is the tooth the chart two tabs away calls it.
   const toothLabel = useCallback((n) => universalToFDI(n), []);
 
   const count = useMemo(() => strokeCount(pad.sketch), [pad.sketch]);
+  // Says what is there, and only offers to draw to somebody who can.
   const summary = count > 0
     ? `${pad.pageCount} page${pad.pageCount === 1 ? '' : 's'} · ${count} mark${count === 1 ? '' : 's'}`
-    : isDental ? 'Draw on a tooth chart to explain the plan' : 'Sketch a note for this visit';
+    : disabled ? 'Nothing drawn for this visit'
+      : isDental ? 'Draw on a tooth chart to explain the plan' : 'Sketch a note for this visit';
+  const firstDrawn = pad.pages.find((p) => p.strokes.length > 0);
 
   // ── Full screen ─────────────────────────────────────────────────────────
   // The overlay is the full screen. The browser's own full-screen mode is
@@ -176,7 +202,7 @@ const VisitSketchPad = ({
       const result = await onExport(svgs);
       setExportState('done');
       setExportMessage(result?.saved === false
-        ? 'Downloaded. It could not be filed under Documents — try again, or upload the PDF there yourself.'
+        ? 'Downloaded, but it could not be filed under Documents. Try again, or upload the PDF there yourself.'
         : 'Downloaded, and filed under Documents.');
       clearTimeout(doneTimer.current);
       doneTimer.current = setTimeout(() => setExportState('idle'), 4000);
@@ -252,7 +278,7 @@ const VisitSketchPad = ({
           </button>
         </div>
 
-        {!disabled && <SketchToolbar {...pad} />}
+        {!disabled && <SketchToolbar {...pad} backdrops={backdrops} />}
         {exportNote}
         <FitPage>{surface}</FitPage>
         <div className="shrink-0 rounded-xl border border-gray-200 bg-white px-2 py-1.5">{pages}</div>
@@ -269,9 +295,18 @@ const VisitSketchPad = ({
           aria-expanded={open}
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2a276e]/[0.07] text-[#2a276e]">
-            <PenLine size={17} />
-          </span>
+          {firstDrawn && !open ? (
+            <span
+              className="relative h-10 w-[60px] shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white"
+              aria-hidden="true"
+            >
+              <SketchSurface page={firstDrawn} readOnly toothLabel={toothLabel} />
+            </span>
+          ) : (
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2a276e]/[0.07] text-[#2a276e]">
+              <PenLine size={17} />
+            </span>
+          )}
           <span className="min-w-0">
             <span className="block text-sm font-bold text-gray-900">Pen notes</span>
             <span className="block truncate text-xs text-gray-500">{summary}</span>
@@ -306,7 +341,7 @@ const VisitSketchPad = ({
               {blockedReason}
             </p>
           )}
-          {!disabled && <SketchToolbar {...pad} trailing={exportButton} />}
+          {!disabled && <SketchToolbar {...pad} backdrops={backdrops} trailing={exportButton} />}
           {exportNote}
           <div className="overflow-hidden rounded-xl border border-gray-300 bg-white" style={{ aspectRatio: '3 / 2' }}>
             {surface}

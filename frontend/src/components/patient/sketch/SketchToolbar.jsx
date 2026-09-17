@@ -42,7 +42,7 @@ const Divider = () => <span className="mx-0.5 h-7 w-px shrink-0 bg-gray-200" ari
 const SketchToolbar = ({
   tool, setTool, color, setColor, size, setSize,
   undo, redo, canUndo, canRedo, clearPage,
-  page, setBackdrop, trailing = null,
+  page, setBackdrop, trailing = null, backdrops = BACKDROPS,
 }) => (
   <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-gray-200 bg-white p-2">
     <Btn active={tool === TOOLS.PEN} onClick={() => setTool(TOOLS.PEN)} title="Pen (P)">
@@ -127,7 +127,12 @@ const SketchToolbar = ({
         aria-label="Page background"
         className="h-full cursor-pointer border-0 bg-transparent pr-1 text-xs font-semibold text-gray-700 outline-none"
       >
-        {BACKDROPS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+        {/* The page's own paper stays in the list even when this clinic would
+            not offer it, or the select would show a blank for it. */}
+        {(backdrops.some((b) => b.key === page.backdrop)
+          ? backdrops
+          : [...BACKDROPS.filter((b) => b.key === page.backdrop), ...backdrops]
+        ).map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
       </select>
     </label>
 

@@ -44,7 +44,7 @@ const SketchSurface = ({
     viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
     preserveAspectRatio="xMidYMid meet"
     role="img"
-    aria-label={readOnly ? 'Pen notes page' : 'Pen notes for this visit — draw here'}
+    aria-label={readOnly ? 'Pen notes page' : 'Pen notes for this visit. Draw here.'}
     className={`block h-full w-full select-none ${className}`}
     style={readOnly
       ? { pointerEvents: 'none' }

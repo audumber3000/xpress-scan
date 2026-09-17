@@ -242,7 +242,7 @@ def export_filename(paper) -> str:
 def display_name(clinic, paper) -> str:
     """What the Documents tab shows."""
     visit = _visit_day(clinic, getattr(paper, 'date', None))
-    return f'Pen notes — {visit}.pdf' if visit else 'Pen notes.pdf'
+    return f'Pen notes {visit}.pdf' if visit else 'Pen notes.pdf'
 
 
 def prepare_pages(raw_pages):

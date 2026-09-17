@@ -604,7 +604,7 @@ const TemplatesEditor = () => {
 
                 <Section title="Visible Fields">
                   <p className="text-xs text-gray-500 -mt-1">
-                    What prints on the {activeTab}. Unticking hides the field — it never
+                    What prints on the {activeTab}. Unticking hides the field. It never
                     invents one, so anything you haven't filled in stays blank either way.
                   </p>
 
@@ -857,7 +857,7 @@ const TemplatesEditor = () => {
                 <h3 className="font-bold text-gray-900">Choose a layout</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
                   For {TABS.find((t) => t.id === activeTab)?.label.toLowerCase()}. Shown in the app's
-                  colours so you are comparing layouts, not palettes — your own accent is applied
+                  colours so you are comparing layouts, not palettes. Your own accent is applied
                   the moment you pick one. Applies straight away; save to keep it.
                 </p>
               </div>

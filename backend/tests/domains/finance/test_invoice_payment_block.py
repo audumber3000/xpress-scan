@@ -75,7 +75,7 @@ def test_a_settled_bill_says_so():
 
 def test_a_part_paid_bill_counts_the_payments():
     html = render_payment_block(_invoice([_payment(2000, 1), _payment(1500, 10)]))
-    assert 'Part paid — 2 payments received' in html
+    assert 'Part paid: 2 payments received' in html
 
 
 def test_one_payment_is_not_pluralised():

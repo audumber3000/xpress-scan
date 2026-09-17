@@ -252,9 +252,9 @@ const Backup = () => {
         <div className="min-w-0 text-xs leading-relaxed text-amber-900">
           <p className="font-bold">What this file does not contain</p>
           <p className="mt-1">
-            Uploaded files themselves — x-rays, scans and signed PDFs — are not in
-            the zip. Their details are listed, so you can see what exists, but each
-            file is downloaded from the patient's own record.
+            Uploaded files (x-rays, scans and signed PDFs) are not in the zip.
+            Their details are listed, so you can see what exists, but each file is
+            downloaded from the patient's own record.
           </p>
           <p className="mt-1.5">
             Sign-in details are left out on purpose. Nobody can use this file to get

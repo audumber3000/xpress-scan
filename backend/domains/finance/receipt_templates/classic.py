@@ -140,7 +140,7 @@ def render_receipt(invoice, payment, clinic, config=None) -> str:
 
     settled_row = (
         '<tr><td colspan="3" style="text-align:center;font-weight:bold;color:#15803D;">'
-        'Invoice settled in full — no balance outstanding.</td></tr>'
+        'Invoice settled in full. No balance outstanding.</td></tr>'
         if settled else ''
     )
 
