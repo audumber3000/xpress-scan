@@ -843,7 +843,15 @@ class UnifiedFileResponseDTO(BaseModel):
     file_type: str
     uploader_name: Optional[str] = "System"
     created_at: datetime
-    category: str  # 'document' or 'report'
+    # What the clinic filed this as: an imaging kind ('OPG', 'CBCT'), a
+    # paperwork kind ('Report', 'Referral'), 'report' for a generated medical
+    # report, or 'document' for an upload from before the picker existed.
+    # Which tab shows it follows from this — see core/file_categories.
+    category: str
+    # Which tooth or region an image covers, and the finding filed with it.
+    # Null on paperwork and on everything uploaded before these were stored.
+    tooth_area: Optional[str] = None
+    notes: Optional[str] = None
     # Unguessable token for GET /documents/{id}/thumbnail. That endpoint stays
     # header-less because it is used as an <img src>, so the token is what stops
     # sequential ids from exposing every clinic's imaging. Absent for reports,

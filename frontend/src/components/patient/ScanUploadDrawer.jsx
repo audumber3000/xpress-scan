@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { api } from '../../utils/api';
 import { notify } from '../../utils/notify';
+import { IMAGING_CATEGORIES, isImaging } from '../../utils/fileCategories';
 
 const ScanUploadDrawer = ({ isOpen, onClose, onUpload, patientId, casePaperId }) => {
     const [selectedFiles, setSelectedFiles] = useState([]);
-    const [tag, setTag] = useState('X-Ray');
+    const [tag, setTag] = useState('IOPA');
     const [notes, setNotes] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef(null);
@@ -25,12 +26,17 @@ const ScanUploadDrawer = ({ isOpen, onClose, onUpload, patientId, casePaperId })
             const uploadPromises = selectedFiles.map(async (file) => {
                 const formData = new FormData();
                 formData.append('file', file);
-                
-                const url = casePaperId 
-                    ? `/documents/upload/${patientId}?case_paper_id=${casePaperId}`
-                    : `/documents/upload/${patientId}`;
-                
-                return await api.post(url, formData);
+
+                // The category and the note are sent now. This drawer has had a
+                // picker and a Clinical Notes box since it was written and threw
+                // both away, so every scan was filed as nothing at all — which
+                // is why the Imaging tab was empty and everything piled up under
+                // Documents.
+                const params = new URLSearchParams({ category: tag });
+                if (casePaperId) params.set('case_paper_id', String(casePaperId));
+                if (notes.trim()) params.set('notes', notes.trim());
+
+                return await api.post(`/documents/upload/${patientId}?${params}`, formData);
             });
             
             await Promise.all(uploadPromises);
@@ -61,9 +67,14 @@ const ScanUploadDrawer = ({ isOpen, onClose, onUpload, patientId, casePaperId })
 
                 <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
                     <div>
-                        <label className="block text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider">Select Category</label>
+                        <label className="block text-sm font-bold text-gray-900 mb-1.5 uppercase tracking-wider">Select Category</label>
+                        <p className="text-xs text-gray-500 mb-3">
+                            {isImaging(tag)
+                                ? 'Films, photos and scans are filed on the Imaging tab.'
+                                : 'Reports and consents are filed on the Documents tab.'}
+                        </p>
                         <div className="flex flex-wrap gap-2">
-                            {['X-Ray', 'RVG', 'OPG', 'CBCT', 'Intra-Oral', 'Report', 'Consent'].map(t => (
+                            {[...IMAGING_CATEGORIES, 'Report', 'Consent'].map(t => (
                                 <button key={t} onClick={() => setTag(t)}
                                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
                                         tag === t 

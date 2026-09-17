@@ -24,6 +24,7 @@ import { useNavigationGuard } from '../../contexts/NavigationGuardContext';
 import { getUserDisplayName } from '../../utils/userName';
 import { formatDate } from '../../utils/datetime';
 import { useCasePaperLabels } from '../../utils/casePaper';
+import { canWriteClinical, clinicalWriteBlockReason } from '../../utils/roles';
 import DermClinicalSections from './derm/DermClinicalSections';
 import { useToothSelection } from './useToothSelection';
 import { normaliseChart } from './perio/perioUtils';
@@ -58,6 +59,11 @@ const CasePapersTab = ({
   // Which case paper this clinic keeps. Drives the tooth chart and the two
   // labels that would otherwise say 'dental' to a dermatologist.
   const { isDental, clinicianLabel } = useCasePaperLabels();
+  // Whether this person may write a clinical record at all. The server refuses
+  // a non-clinical role with a 403; asking the same question here is what lets
+  // the app say so before somebody fills in a whole visit and loses it.
+  const canWrite = canWriteClinical(user);
+  const writeBlockedReason = clinicalWriteBlockReason(user);
   const [selectedCasePaper, setSelectedCasePaper] = useState(null);
   // ?casePaper=<id> opens that paper directly. Guarded by a ref so it only
   // fires on the first load: without it, closing the paper would immediately
@@ -371,7 +377,7 @@ const CasePapersTab = ({
       openCallback();
     } catch (err) {
       console.error('Failed to auto-save case paper:', err);
-      notify.problem('Error saving case paper. Please save manually first.');
+      notify.problem(err, 'Error saving case paper. Please save manually first.');
     }
   };
 
@@ -437,7 +443,7 @@ const CasePapersTab = ({
       notify.done(mode === 'billing_only' ? 'Removed from bill' : 'Removed — stock restored');
     } catch (err) {
       console.error('Failed to remove inventory record:', err);
-      notify.problem('Failed to remove');
+      notify.problem(err, 'Failed to remove');
     }
   };
 
@@ -488,7 +494,7 @@ const CasePapersTab = ({
           setCaseHistory(response);
       } catch (err) {
           console.error("Failed to fetch case papers:", err);
-          notify.problem("Failed to load clinical history");
+          notify.problem(err, "Failed to load clinical history");
       } finally {
           setLoading(false);
       }
@@ -624,7 +630,12 @@ const CasePapersTab = ({
           onCasePaperStateChange?.(false);
       } catch (err) {
           console.error("Failed to save case paper:", err);
-          notify.problem("Error saving clinical records");
+          // The error, not just a sentence about it. This used to pass only the
+          // fallback string, so a 403 ("you are signed in as a receptionist"),
+          // a 402 ("the plan has stopped") and a 401 ("your session ended") all
+          // reached the doctor as the same five words — which is how somebody
+          // presses Save fourteen times in ten minutes.
+          notify.problem(err, "Error saving clinical records");
           throw err; // let the navigation guard keep the work if the save failed
       }
   };
@@ -1014,6 +1025,8 @@ const CasePapersTab = ({
   if (!selectedCasePaper) {
     return (
       <CasePaperList
+        canWrite={canWrite}
+        writeBlockedReason={writeBlockedReason}
         caseHistory={caseHistory}
         loading={loading}
         onNewCasePaper={startNewCasePaper}
@@ -1269,7 +1282,7 @@ const CasePapersTab = ({
                   }
               } catch (err) {
                   console.error("Prescription save error:", err);
-                  notify.problem("Failed to save prescription");
+                  notify.problem(err, "Failed to save prescription");
               }
           }}
       />

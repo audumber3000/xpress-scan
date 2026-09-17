@@ -425,6 +425,11 @@ run_migration "consent_pdf_sha"      "ALTER TABLE patient_consents ADD COLUMN IF
 # which is what keeps their documents printing exactly as they do today.
 run_migration "clinic_document_doctors" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS document_doctors JSON"
 
+# Imaging filed as a category of document, with the area and the note the
+# upload drawer has always asked for and never stored.
+run_migration "patient_doc_tooth_area" "ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS tooth_area VARCHAR"
+run_migration "patient_doc_notes"      "ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS notes TEXT"
+
 # ── One-shot data migrations ────────────────────────────────────────────────
 # Everything above is idempotent DDL that can safely run on every deploy. The
 # two below CHANGE DATA, and re-running them would undo decisions clinics made

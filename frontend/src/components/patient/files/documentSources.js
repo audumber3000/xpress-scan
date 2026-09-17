@@ -1,4 +1,5 @@
 import { api } from '../../../utils/api';
+import { isImaging } from '../../../utils/fileCategories';
 
 /**
  * Every PDF a patient has, from the five tables that make them.
@@ -76,7 +77,11 @@ export async function fetchPatientDocuments(patientId, { prescriptions = [], inv
   ]);
 
   const docs = [
-    ...uploads.map((d) => row({
+    // Films, photographs and scans belong on the Imaging tab and are filtered
+    // out here — showing them in both places is how "where did my OPG go"
+    // becomes a support ticket. Everything with no category stays: an upload
+    // from before the picker existed is paperwork until somebody says otherwise.
+    ...uploads.filter((d) => !isImaging(d.category)).map((d) => row({
       id: d.id,
       // An upload can say what it is now that the column exists. Everything
       // stored before it lands under Uploads rather than guessing.

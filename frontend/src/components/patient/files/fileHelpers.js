@@ -68,10 +68,24 @@ export const fileKind = (file) => {
 // a real percentage bar. Mirrors api.post's URL and auth handling.
 const API_BASE = `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/v1`;
 
-export const uploadDocumentWithProgress = (patientId, file, onProgress) =>
+/**
+ * Upload one file to a patient's record.
+ *
+ * `category` is what the file IS — 'OPG', 'Report' — and it decides which tab
+ * of the patient's record shows it afterwards. It used to be left off entirely,
+ * which is why every scan a clinic filed as an OPG appeared under Documents and
+ * the Imaging tab was always empty. `casePaperId` ties it to the visit.
+ */
+export const uploadDocumentWithProgress = (patientId, file, onProgress, opts = {}) =>
   new Promise((resolve, reject) => {
+    const { category = '', casePaperId = null } = opts;
+    const params = new URLSearchParams();
+    if (category) params.set('category', category);
+    if (casePaperId) params.set('case_paper_id', String(casePaperId));
+    const qs = params.toString();
+
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_BASE}/documents/upload/${patientId}`);
+    xhr.open('POST', `${API_BASE}/documents/upload/${patientId}${qs ? `?${qs}` : ''}`);
     const token = localStorage.getItem('auth_token');
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.upload.onprogress = (e) => {

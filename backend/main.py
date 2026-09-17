@@ -771,6 +771,31 @@ async def lifespan(app: FastAPI):
             ):
                 conn.execute(text(_plans_ddl))
 
+            # ── Added 2026-09-17 ────────────────────────────────────────────
+            # The doctors named across the top of a clinic's documents.
+            #
+            # Here and NOT only in deploy-aws.sh, for the reason spelled out
+            # above: the deploy rsyncs `backend/` and then runs the SERVER's own
+            # copy of that script, so a migration added to the repo's copy never
+            # runs. And this one is on `clinics` — SQLAlchemy names every mapped
+            # column in its SELECT, so a missing clinics.document_doctors would
+            # not break the letterhead setting, it would break every query that
+            # loads a clinic. That is login, /auth/me, and everything behind
+            # them, for every clinic, on boot.
+            conn.execute(text(
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS document_doctors JSON"
+            ))
+            # Imaging is a category of document now — an x-ray is a file on a
+            # patient's record like any other, stored in R2 like any other.
+            # These two carry what the upload drawer already asks for and used
+            # to throw away.
+            conn.execute(text(
+                "ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS tooth_area VARCHAR"
+            ))
+            conn.execute(text(
+                "ALTER TABLE patient_documents ADD COLUMN IF NOT EXISTS notes TEXT"
+            ))
+
             # ── One-shot DATA migrations ────────────────────────────────────
             # Everything above is idempotent DDL, so re-running it every boot is
             # free. These two CHANGE DATA, and a re-run would silently undo what

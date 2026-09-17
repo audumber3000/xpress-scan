@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pencil, Trash2, Clock, Stethoscope, CalendarClock, ClipboardList, Plus } from 'lucide-react';
+import { Pencil, Trash2, Clock, Stethoscope, CalendarClock, ClipboardList, Plus, Lock } from 'lucide-react';
 import { nextVisitSummary, NOT_SPECIFIED } from '../../utils/nextVisit';
 import { clinicDateKey, clinicToday, formatDate, formatTime, parseServerDate } from '../../utils/datetime';
 
@@ -56,23 +56,40 @@ const complaintTitle = (val) => {
     return pills.length ? pills.join(', ') : 'General Checkup';
 };
 
-const CasePaperList = ({ caseHistory, loading, onNewCasePaper, onSelectCasePaper, onDeleteCasePaper }) => {
+const CasePaperList = ({
+  caseHistory, loading, onNewCasePaper, onSelectCasePaper, onDeleteCasePaper,
+  canWrite = true, writeBlockedReason = '',
+}) => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Clinical Case Papers</h2>
         {/* The house primary: flat, rounded-lg, no shadow and no hover lift.
             The press scale stays — that is feedback, not decoration, and it is
-            the one thing telling the doctor the click landed. */}
+            the one thing telling the doctor the click landed.
+
+            Disabled for a role the server will refuse anyway. Offering the
+            button and failing at the end is how somebody fills in a whole
+            visit and loses it. */}
         <button
           type="button"
           onClick={onNewCasePaper}
-          className="inline-flex items-center gap-2 h-10 px-3.5 rounded-lg bg-[#2a276e] text-white text-sm font-semibold whitespace-nowrap cursor-pointer transition-[background-color,transform] duration-150 ease-out hover:bg-[#1a1548] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2a276e]"
+          disabled={!canWrite}
+          title={canWrite ? undefined : writeBlockedReason}
+          className="inline-flex items-center gap-2 h-10 px-3.5 rounded-lg bg-[#2a276e] text-white text-sm font-semibold whitespace-nowrap cursor-pointer transition-[background-color,transform] duration-150 ease-out hover:bg-[#1a1548] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2a276e] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300 disabled:active:scale-100"
         >
           <Plus size={16} strokeWidth={2.5} />
           New Case Paper
         </button>
       </div>
+
+      {/* Said once, at the top, rather than as a toast after each attempt. */}
+      {!canWrite && writeBlockedReason && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50/60 px-4 py-3">
+          <Lock size={15} className="mt-0.5 shrink-0 text-amber-600" />
+          <p className="text-xs leading-relaxed text-amber-900">{writeBlockedReason}</p>
+        </div>
+      )}
       
       {loading ? (
         <div className="flex justify-center py-20">

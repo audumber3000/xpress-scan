@@ -1612,7 +1612,20 @@ class PatientDocument(Base):
     # What kind of paperwork this is: referral, report, estimate, insurance,
     # other. Consents, prescriptions, invoices and reports are their own tables
     # and carry their own category; this one is for anything uploaded by hand.
+    #
+    # It also carries the IMAGING kinds — IOPA, OPG, CBCT, Photo — because an
+    # x-ray is a file on a patient's record like any other, and this is the
+    # column the Imaging tab filters on. See core/file_categories.
     category = Column(String, nullable=True)
+    # Which tooth or region an image covers: an FDI number ("46"), an arch, or
+    # "Full Mouth". Free text, because an OPG covers everything and a bitewing
+    # covers a pair. Mirrors xray_images.tooth_area so the two sources the
+    # Imaging tab reads can be shown and searched the same way.
+    tooth_area = Column(String, nullable=True)
+    # The finding the clinician typed when filing it. The upload drawer has had
+    # a Clinical Notes box since it was written and nothing ever stored what was
+    # typed into it.
+    notes = Column(Text, nullable=True)
     uploaded_by = Column(Integer, ForeignKey('users.id'))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

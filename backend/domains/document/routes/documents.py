@@ -8,6 +8,7 @@ from database import get_db
 from models import PatientDocument, Patient, User, Report
 from core.dtos import PatientDocumentResponseDTO, ExternalDocumentRequestDTO, UnifiedFileResponseDTO
 from core.auth_utils import get_current_user
+from core.file_categories import normalise_category
 from domains.infrastructure.services.r2_storage import (
     upload_bytes_to_r2, StorageCategory, get_presigned_url, download_bytes_from_r2,
     put_bytes_to_key, delete_file_from_r2,
@@ -95,6 +96,21 @@ async def upload_document(
     patient_id: int,
     file: UploadFile = File(...),
     case_paper_id: Optional[int] = None,
+    # What this file IS — 'OPG', 'CBCT', 'Report', and so on. Decides which tab
+    # of the patient's record it appears on; see core/file_categories.
+    #
+    # The upload drawer has had a category picker since it was written and this
+    # endpoint never accepted one, so every scan a clinic filed as an OPG was
+    # stored with no kind at all and the Imaging tab stayed permanently empty.
+    # A Query parameter rather than a Form field on purpose: `case_paper_id`
+    # above is already one, and the existing callers send multipart bodies
+    # carrying nothing but the file.
+    category: Optional[str] = None,
+    # What an image covers ("46", "Lower Arch", "Full Mouth") and the finding
+    # the clinician typed when filing it. Both optional, both shown and searched
+    # on the Imaging tab.
+    tooth_area: Optional[str] = None,
+    notes: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -128,6 +144,13 @@ async def upload_document(
         file_path=storage_path, # Storage key
         file_size=file_size,
         file_type=file_type,
+        # Normalised, never stored verbatim: older tablets still send 'X-Ray'
+        # and 'Intra-Oral', and a file filed under a word no screen filters on
+        # is a file nobody finds. Unrecognised input stores NULL rather than a
+        # guess — "nobody said" is a real answer and both tabs know it.
+        category=normalise_category(category),
+        tooth_area=(tooth_area or '').strip() or None,
+        notes=(notes or '').strip() or None,
         uploaded_by=current_user.id
     )
     db.add(document)
@@ -285,7 +308,8 @@ async def list_documents(
         rows = db.execute(
             text(
                 """
-                SELECT id, patient_id, clinic_id, file_name, file_path, file_size, file_type, uploaded_by, created_at
+                SELECT id, patient_id, clinic_id, file_name, file_path, file_size, file_type,
+                       category, uploaded_by, created_at
                 FROM patient_documents
                 WHERE patient_id = :patient_id AND clinic_id = :clinic_id
                 ORDER BY created_at DESC
@@ -332,7 +356,15 @@ async def list_documents(
             file_type=doc_get(doc, 'file_type') or "unknown",
             uploader_name=uploader_name,
             created_at=doc_get(doc, 'created_at'),
-            category="document",
+            # What the clinic filed it as. This was hardcoded to "document",
+            # which discarded the stored value on the way out — so even once
+            # the upload started saving a category, every reader would still
+            # have been told every file was the same kind of thing.
+            # NULL stays NULL: an upload from before the picker existed has no
+            # kind, and both tabs treat that as paperwork.
+            category=doc_get(doc, 'category') or "document",
+            tooth_area=doc_get(doc, 'tooth_area'),
+            notes=doc_get(doc, 'notes'),
             thumbnail_token=thumbnail_token(doc_get(doc, 'id')),
         ))
         

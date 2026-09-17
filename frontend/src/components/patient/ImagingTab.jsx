@@ -13,6 +13,8 @@ import {
   ACCEPT, MAX_FILE_MB, humanSize, fileUrl, canOpen, uploadDocumentWithProgress,
 } from './files/fileHelpers';
 import { useIsDentalPatient } from '../../utils/casePaper';
+import { IMAGING_CATEGORIES, IMAGING_STYLE, isImaging, normaliseCategory } from '../../utils/fileCategories';
+import ImagingUploadModal from './files/ImagingUploadModal';
 
 // One viewer for every kind of file. Was a DICOM-only overlay, with every
 // other image sent to a new browser tab — so opening two files in a row
@@ -32,22 +34,10 @@ const FileViewerModal = lazy(() => import('../common/viewer/FileViewerModal'));
  */
 const TYPES = [
   { key: 'all', label: 'All Images' },
-  { key: 'IOPA', label: 'IOPA' },
-  { key: 'OPG', label: 'OPG' },
-  { key: 'Bitewing', label: 'Bitewing' },
-  { key: 'CBCT', label: 'CBCT' },
-  { key: 'Photo', label: 'Photo' },
-  { key: 'Scan', label: 'Scan' },
+  ...IMAGING_CATEGORIES.map((k) => ({ key: k, label: k })),
 ];
 
-const TYPE_STYLE = {
-  IOPA: 'bg-[#2a276e]/[0.08] text-[#2a276e]',
-  OPG: 'bg-violet-50 text-violet-700',
-  Bitewing: 'bg-blue-50 text-blue-700',
-  CBCT: 'bg-amber-50 text-amber-700',
-  Photo: 'bg-emerald-50 text-emerald-700',
-  Scan: 'bg-gray-100 text-gray-600',
-};
+const TYPE_STYLE = IMAGING_STYLE;
 
 const SORTS = [
   { value: 'newest', label: 'Sort: Newest first' },
@@ -92,13 +82,57 @@ const ImagingTab = ({ patientId, patient, user }) => {
   const [sort, setSort] = useState('newest');
   const [view, setView] = useState('grid');
 
+  /**
+   * Every image of this patient, from both places they can be.
+   *
+   * This tab used to read `xray_images` alone — a table nothing the clinic can
+   * reach ever writes to, because `POST /xray/upload` rejects anything that is
+   * not a `.dcm` and saves to container-local disk. Meanwhile every real upload
+   * went to `patient_documents` and showed up under Documents. So the tab was
+   * empty for every clinic, always, and the films were one tab to the left.
+   *
+   * Now it reads the documents filed as imaging, and still reads the legacy
+   * x-ray rows so a clinic that has some does not lose them. Both are mapped to
+   * one row shape; `source` says which table a row came from, because delete
+   * and download have to go back to the right one.
+   */
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/xray/patient/${patientId}`);
-      setImages(Array.isArray(res) ? res : []);
-    } catch {
-      notify.problem('Could not load this patient\'s imaging.');
+      const [docs, legacy] = await Promise.all([
+        api.get(`/documents/patient/${patientId}`).catch(() => []),
+        // A clinic with no legacy films 404s or returns nothing here, and that
+        // must not blank the rest of the tab.
+        api.get(`/xray/patient/${patientId}`).catch(() => []),
+      ]);
+
+      const fromDocuments = (Array.isArray(docs) ? docs : [])
+        .filter((d) => isImaging(d.category))
+        .map((d) => ({
+          id: d.id,
+          source: 'document',
+          image_type: normaliseCategory(d.category),
+          file_name: d.file_name,
+          file_path: d.file_path,
+          file_size: d.file_size,
+          file_type: d.file_type,
+          tooth_area: d.tooth_area || null,
+          notes: d.notes || null,
+          capture_date: d.created_at,
+          created_at: d.created_at,
+          case_paper_id: d.case_paper_id ?? null,
+          thumbnail_token: d.thumbnail_token,
+        }));
+
+      const fromXray = (Array.isArray(legacy) ? legacy : []).map((i) => ({
+        ...i,
+        source: 'xray',
+        image_type: normaliseCategory(i.image_type) || i.image_type || 'Scan',
+      }));
+
+      setImages([...fromDocuments, ...fromXray]);
+    } catch (err) {
+      notify.problem(err, 'Could not load this patient\'s imaging.');
       setImages([]);
     } finally {
       setLoading(false);
@@ -134,9 +168,9 @@ const ImagingTab = ({ patientId, patient, user }) => {
    */
   const viewable = useMemo(
     () => visible.filter(canOpen).map((i) => ({
-      key: `xray-${i.id}`,
+      key: `${i.source || 'xray'}-${i.id}`,
       id: i.id,
-      source: 'xray',
+      source: i.source || 'xray',
       name: i.file_name || `${i.image_type || 'Image'} ${i.id}`,
       url: fileUrl(i),
       fileType: i.image_type,
@@ -156,18 +190,31 @@ const ImagingTab = ({ patientId, patient, user }) => {
     setViewerAt(at);
   };
 
-  const upload = async (fileList) => {
+  // Choosing the files is only half of it. They used to go straight up with no
+  // kind attached, which is why nothing could be found again — so the picker
+  // holds them and asks what they are first.
+  const [pending, setPending] = useState([]);
+
+  const choose = (fileList) => {
     const all = Array.from(fileList || []).filter(Boolean);
     const valid = all.filter((f) => f.size <= MAX_FILE_MB * 1024 * 1024);
     if (all.length !== valid.length) notify.problem(`Files over ${MAX_FILE_MB} MB were skipped.`);
-    if (!valid.length) return;
+    if (valid.length) setPending(valid);
+  };
+
+  const upload = async ({ category, toothArea, notes }) => {
     setUploading(true);
     try {
-      for (const f of valid) await uploadDocumentWithProgress(patientId, f, () => {});
-      notify.done(valid.length === 1 ? 'Image uploaded' : `${valid.length} images uploaded`);
+      for (const f of pending) {
+        await uploadDocumentWithProgress(patientId, f, () => {}, {
+          category, toothArea, notes,
+        });
+      }
+      notify.done(pending.length === 1 ? 'Image added' : `${pending.length} images added`);
+      setPending([]);
       await load();
-    } catch {
-      notify.problem('Upload failed. Please try again.');
+    } catch (err) {
+      notify.problem(err, 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -197,7 +244,7 @@ const ImagingTab = ({ patientId, patient, user }) => {
             {uploading ? 'Uploading' : 'Upload'}
             <input
               type="file" multiple accept={ACCEPT} disabled={uploading} className="hidden"
-              onChange={(e) => { upload(e.target.files); e.target.value = ''; }}
+              onChange={(e) => { choose(e.target.files); e.target.value = ''; }}
             />
           </label>
 
@@ -309,6 +356,18 @@ const ImagingTab = ({ patientId, patient, user }) => {
       )}
 
       <RvgCaptureModal open={captureOpen} onClose={() => setCaptureOpen(false)} user={user} />
+
+      {/* Defaults to whichever type the clinician is already filtering on: if
+          they are looking at OPGs, the one they are about to add is an OPG. */}
+      <ImagingUploadModal
+        open={pending.length > 0}
+        files={pending}
+        areaLabel={areaLabel}
+        defaultType={type === 'all' ? 'IOPA' : type}
+        uploading={uploading}
+        onCancel={() => setPending([])}
+        onConfirm={upload}
+      />
 
       {viewerAt !== null && viewable[viewerAt] && (
         <Suspense fallback={<div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/95 text-white text-sm">Loading viewer…</div>}>
