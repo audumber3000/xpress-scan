@@ -55,6 +55,14 @@ services:
       - CASHFREE_ENV=${CASHFREE_ENV}
       - CASHFREE_RETURN_URL=${CASHFREE_RETURN_URL}
       - CASHFREE_NOTIFY_URL=${CASHFREE_NOTIFY_URL}
+      # Dodo Payments: clinics outside India pay in dollars through it
+      # (core/payment_gateways.py). Optional: blank keys refuse dollar
+      # checkouts up front and leave Cashfree untouched.
+      - DODO_PAYMENTS_API_KEY=${DODO_PAYMENTS_API_KEY:-}
+      - DODO_PAYMENTS_ENV=${DODO_PAYMENTS_ENV:-test_mode}
+      - DODO_PAYMENTS_WEBHOOK_KEY=${DODO_PAYMENTS_WEBHOOK_KEY:-}
+      - DODO_PRODUCT_ID=${DODO_PRODUCT_ID:-}
+      - DODO_RETURN_URL=${DODO_RETURN_URL:-}
       - SUBSCRIPTION_PROVIDER=${SUBSCRIPTION_PROVIDER}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_PLACES_API_KEY=${GOOGLE_PLACES_API_KEY}

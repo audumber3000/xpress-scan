@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Zap, Clock, ShieldCheck, CheckCircle2, RefreshCcw, FileText, Lock } from 'lucide-react';
-import { planLabel, resolvePlan, useFeaturedPromo, TRIAL_DAYS } from '../../../utils/plans';
+import { planLabel, resolvePlan, useFeaturedPromo, TRIAL_DAYS, paymentGateway } from '../../../utils/plans';
 import PaymentHelp from '../../../components/payments/PaymentHelp';
 import CurrentPlanCard from './CurrentPlanCard';
 import PromoCodeBox from './PromoCodeBox';
@@ -52,15 +52,23 @@ const StatusBanner = ({ tone, icon, title, body }) => {
   );
 };
 
-const REASSURANCE = [
-  // Promised something the checkout refuses. A paying clinic can move up at any
-  // time and cannot move down while the plan it bought is still running, so
-  // this says how a smaller plan is actually reached rather than implying a
-  // button that is disabled.
-  { icon: <RefreshCcw size={14} />, text: 'Move up at any time. To move to a smaller plan, pick it when your current one comes up for renewal.' },
-  { icon: <FileText size={14} />, text: 'A GST invoice for every payment, so a registered clinic can claim input credit.' },
-  { icon: <Lock size={14} />, text: 'Payments handled by Cashfree. We never see or store your card.' },
-];
+// Per currency, because two of the three are only true in India: GST, and
+// Cashfree. A clinic abroad pays in dollars through Dodo Payments and is not
+// sent a GST invoice.
+const reassurance = (currency) => {
+  const gateway = paymentGateway(currency);
+  return [
+    // Promised something the checkout refuses. A paying clinic can move up at any
+    // time and cannot move down while the plan it bought is still running, so
+    // this says how a smaller plan is actually reached rather than implying a
+    // button that is disabled.
+    { icon: <RefreshCcw size={14} />, text: 'Move up at any time. To move to a smaller plan, pick it when your current one comes up for renewal.' },
+    gateway.key === 'cashfree'
+      ? { icon: <FileText size={14} />, text: 'A GST invoice for every payment, so a registered clinic can claim input credit.' }
+      : { icon: <FileText size={14} />, text: 'A receipt for every payment, kept in Billing History.' },
+    { icon: <Lock size={14} />, text: `Payments handled by ${gateway.label}. We never see or store your card.` },
+  ];
+};
 
 const PlansTab = ({
   subscription, catalogue, usage, lastPayment, clinicName,
@@ -201,7 +209,7 @@ const PlansTab = ({
         />
 
         <ul className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {REASSURANCE.map((r) => (
+          {reassurance(catalogue.currency).map((r) => (
             <li key={r.text} className="flex items-start gap-2 text-[11px] leading-relaxed text-gray-500">
               <span className="mt-0.5 shrink-0 text-gray-400">{r.icon}</span>
               {r.text}

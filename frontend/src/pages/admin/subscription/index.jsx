@@ -40,7 +40,7 @@ const Subscription = () => {
   const { catalogue } = usePlanCatalogue();
   const { usage } = usePlanUsage();
 
-  // ?tab=addons opens straight onto the add-ons, which is where Cashfree sends
+  // ?tab=addons opens straight onto the add-ons, which is where the gateway sends
   // an add-on payment back to and where reminders about one link.
   const [activeTab, setActiveTab] = useState(() => {
     const t = new URLSearchParams(location.search).get('tab');
@@ -72,7 +72,7 @@ const Subscription = () => {
     }
   }, []);
 
-  // Coming back from Cashfree with ?order_id=... means a payment just happened
+  // Coming back from Cashfree or Dodo with ?order_id=... means a payment just happened
   // and the webhook may not have landed yet, so verify directly before reading.
   useEffect(() => {
     const orderId = new URLSearchParams(location.search).get('order_id');

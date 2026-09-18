@@ -185,6 +185,18 @@ export const isIndia = (clinic = cachedClinic()) => billingCurrency(clinic) === 
 /** 18% on Indian invoices, nothing elsewhere. */
 export const gstRate = (clinic = cachedClinic()) => (isIndia(clinic) ? GST_RATE : 0);
 
+/**
+ * Who takes the money, for wording only: rupees go through Cashfree, dollars
+ * through Dodo Payments. Mirrors backend core/payment_gateways.py. The server
+ * decides the real gateway at checkout and the page follows its answer, so
+ * this can only ever change what a label says.
+ */
+export function paymentGateway(currency = billingCurrency()) {
+  return currency === INR
+    ? { key: 'cashfree', label: 'Cashfree' }
+    : { key: 'dodo', label: 'Dodo Payments' };
+}
+
 /** "₹3,830" / "$38". Rupees group the Indian way. */
 export function formatPrice(amount, currency = billingCurrency()) {
   const value = Number(amount || 0);
