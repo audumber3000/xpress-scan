@@ -74,6 +74,29 @@ def contact(user) -> Optional[Dict[str, Any]]:
     }
 
 
+def account_contact(owner, phone, email, country) -> Optional[Dict[str, Any]]:
+    """Who to contact about an account, for a list row that names it.
+
+    `name` is the owner's; `phone` and `email` are the owner's own where the
+    product has them and the account clinic's otherwise; `country_code` is where
+    the clinic is, because a number stored without a `+` means nothing until
+    somebody knows which country to dial it in — `5408726924` is Virginia, not
+    Mumbai. The number is sent as stored rather than normalised here: the CRM
+    parses it with libphonenumber, which this product does not carry.
+    """
+    name = ""
+    if owner is not None:
+        name = " ".join(part.strip() for part in (owner.first_name, owner.last_name)
+                        if part and part.strip())
+    contact = {
+        "name": name or None,
+        "phone": (getattr(owner, "phone", None) if owner is not None else None) or phone or None,
+        "email": (owner.email if owner is not None else None) or email or None,
+        "country_code": country.upper() if country else None,
+    }
+    return contact if any(contact[k] for k in ("name", "phone", "email")) else None
+
+
 def account(clinic, changed_at, branch_count: int, is_trial: bool = False,
             owner=None) -> Dict[str, Any]:
     """A MolarPlus account: a parent clinic, promoted. See integration/org.py.
@@ -102,7 +125,8 @@ def account(clinic, changed_at, branch_count: int, is_trial: bool = False,
     }
 
 
-def branch(clinic, account_clinic_id: int, account_name: str, metrics) -> Dict[str, Any]:
+def branch(clinic, account_clinic_id: int, account_name: str, metrics,
+           contact=None) -> Dict[str, Any]:
     """A site. In MolarPlus every clinic row is one, the account's own included.
 
     A closed branch is not a churned account: `clinics.status` answers both
@@ -114,8 +138,13 @@ def branch(clinic, account_clinic_id: int, account_name: str, metrics) -> Dict[s
         "id": ext_id(clinic.id),
         "account_id": org.account_id(account_clinic_id),
         "account_name": account_name or "",
+        "account_contact": contact,
         "name": clinic.name or "",
         "code": clinic.clinic_code,
+        # The site's own line. A branch's front desk is its own number, and it
+        # is the one to call about that branch rather than the owner's.
+        "phone": clinic.phone or None,
+        "email": clinic.email or None,
         "status": vocab.branch_status(clinic.status, clinic.id),
         "address": address(clinic),
         "end_customer_count": metrics.end_customer_count,
@@ -139,7 +168,8 @@ def account_stats(account_id: str, totals, currency: str, as_of) -> Dict[str, An
     }
 
 
-def subscription(row, account_clinic_id: int, account_name: str, clinic) -> Dict[str, Any]:
+def subscription(row, account_clinic_id: int, account_name: str, clinic,
+                 contact=None) -> Dict[str, Any]:
     """What an account pays ClinoHealth.
 
     Four plan fields because they answer four different questions, and the
@@ -169,6 +199,7 @@ def subscription(row, account_clinic_id: int, account_name: str, clinic) -> Dict
         "id": ext_id(row.id),
         "account_id": org.account_id(account_clinic_id),
         "account_name": account_name or "",
+        "account_contact": contact,
         "plan_code": plans.stored_name(tier, cycle),
         "plan_tier": tier,
         "effective_tier": plans.effective_plan(row.plan_name, row.status, row.current_end),
@@ -205,7 +236,7 @@ def subscription(row, account_clinic_id: int, account_name: str, clinic) -> Dict
     }
 
 
-def payment(row, account_clinic_id: int, account_name: str) -> Dict[str, Any]:
+def payment(row, account_clinic_id: int, account_name: str, contact=None) -> Dict[str, Any]:
     """Settled money — what MRR, ARR and revenue-over-time are actually built from.
 
     `amount` is what the provider settled: tax included, discount already
@@ -227,6 +258,7 @@ def payment(row, account_clinic_id: int, account_name: str) -> Dict[str, Any]:
         "id": ext_id(row.id),
         "account_id": org.account_id(account_clinic_id),
         "account_name": account_name or "",
+        "account_contact": contact,
         "subscription_id": ext_id(row.subscription_id),
         "plan_name": row.plan_name,
         "amount": money(row.amount, row.currency),
