@@ -32,16 +32,20 @@ matching account `42` against a completely different organisation that happens
 to share the number. A rename is loud; a silent wrong merge is not.
 """
 import datetime
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import aliased
 
-from models import Clinic
+from models import Clinic, User
 
 from .wire import ContractError
 
 ACCOUNT_ID_PREFIX = "clinic:"
+
+# The role an account's owner holds. The owner is who the CRM calls: the person
+# who signed the clinic up, and in a dental practice almost always the dentist.
+OWNER_ROLE = "clinic_owner"
 
 # COALESCE fallback for rows predating a timestamp column. Any fixed instant in
 # the past works; what matters is that the sort key is never NULL, because a
@@ -107,6 +111,87 @@ def account_name():
         .correlate(Clinic)
         .scalar_subquery(),
         Clinic.name,
+    )
+
+
+def account_owner_name():
+    """SQL expression: the name of the owner of the account a row belongs to.
+
+    For search, beside `account_name`. The CRM's tables show the doctor on
+    every row, and "Harish" is as likely a thing to type into the box as the
+    clinic's name — more likely, when the doctor is the one on the phone.
+    """
+    parent = aliased(Clinic)
+    account = func.coalesce(
+        select(parent.id)
+        .where(parent.id == Clinic.parent_clinic_id, parent.id != Clinic.id)
+        .correlate(Clinic)
+        .scalar_subquery(),
+        Clinic.id,
+    )
+    return (
+        select(User.name)
+        .where(User.clinic_id == account, User.role == OWNER_ROLE,
+               User.is_active.is_(True))
+        .order_by(User.id.asc())
+        .limit(1)
+        .correlate(Clinic)
+        .scalar_subquery()
+    )
+
+
+def owners(db, account_ids: List[int]) -> Dict[int, User]:
+    """The active owner at each account clinic, lowest id wins.
+
+    A clinic can have several rows with the owner role after an ownership
+    handover. Picking deterministically matters more than picking correctly:
+    the CRM upserts this as a Person, and an owner that alternates between two
+    people on successive syncs produces a Person record that flickers.
+    """
+    if not account_ids:
+        return {}
+    found = {}
+    rows = (
+        db.query(User)
+        .filter(User.clinic_id.in_(account_ids))
+        .filter(User.role == OWNER_ROLE)
+        .filter(User.is_active.is_(True))
+        .order_by(User.id.asc())
+        .all()
+    )
+    for user in rows:
+        found.setdefault(user.clinic_id, user)
+    return found
+
+
+def contacts(db, account_ids) -> Dict[int, Optional[Dict[str, Any]]]:
+    """Account clinic id → who to contact there, for a list row.
+
+    Every list that names a clinic sends this beside `account_name`, because a
+    person reading it next has to *reach* the clinic, and `account_name` alone
+    left them looking the owner and the number up somewhere else — which is to
+    say, not calling. Two queries for the page, not two per row.
+
+    The owner's own mobile and email where the product has them, else the
+    clinic's. For most clinics they are the same person's: the owner fills in
+    the clinic's contact details at signup, and 260 of 265 clinics carry the
+    owner's own email as the clinic's.
+    """
+    from . import shapes   # shapes imports org; resolved at call time
+
+    ids = sorted(set(i for i in account_ids if i is not None))
+    if not ids:
+        return {}
+    owner_of = owners(db, ids)
+    rows = (
+        db.query(Clinic.id, Clinic.phone, Clinic.email, Clinic.country)
+        .filter(Clinic.id.in_(ids))
+        .all()
+    )
+    return dict(
+        (row.id, shapes.account_contact(owner_of.get(row.id), row.phone, row.email,
+                                        row.country))
+        for row in rows
     )
 
 

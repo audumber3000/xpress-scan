@@ -36,7 +36,7 @@ router = APIRouter()
 PRODUCT_CODE = "molarplus"
 CONTRACT_VERSION = "1.0"
 
-OWNER_ROLE = "clinic_owner"
+OWNER_ROLE = org.OWNER_ROLE
 
 
 def _limit(limit: int) -> int:
@@ -250,27 +250,8 @@ def _trial_flags(db: Session, groups: Dict[int, List[int]],
 
 
 def _owners(db: Session, account_ids: List[int]) -> Dict[int, User]:
-    """The active owner at each account clinic, lowest id wins.
-
-    A clinic can have several rows with the owner role after an ownership
-    handover. Picking deterministically matters more than picking correctly:
-    the CRM upserts this as a Person, and an owner that alternates between two
-    people on successive syncs produces a Person record that flickers.
-    """
-    if not account_ids:
-        return {}
-    found = {}
-    rows = (
-        db.query(User)
-        .filter(User.clinic_id.in_(account_ids))
-        .filter(User.role == OWNER_ROLE)
-        .filter(User.is_active.is_(True))
-        .order_by(User.id.asc())
-        .all()
-    )
-    for user in rows:
-        found.setdefault(user.clinic_id, user)
-    return found
+    """See `org.owners` — shared with the contacts every list row carries."""
+    return org.owners(db, account_ids)
 
 
 def _serialise_accounts(db: Session, rows: List[Tuple], now=None) -> List[dict]:
@@ -545,7 +526,9 @@ def list_branches(
             aggregates.end_customer_count_expression(Clinic) >= min_end_customers)
 
     rows_q = query.search(rows_q, browse.q, (Clinic.name, org.account_name(),
-                                             Clinic.clinic_code, Clinic.city))
+                                             Clinic.clinic_code, Clinic.city,
+                                             org.account_owner_name(), Clinic.phone,
+                                             Clinic.email))
 
     if browse.group_by:
         return query.group(rows_q, browse.group_by, BRANCH_GROUPS)
@@ -566,9 +549,11 @@ def _branches(db: Session, visible) -> List[Dict[str, Any]]:
 
     """One page of branches, with the account each belongs to and its numbers."""
     accounts = _accounts_of(db, visible)
+    contacts = org.contacts(db, [account for account, _ in accounts.values()])
     metrics = aggregates.for_clinics(db, [c.id for c in visible])
     return [
-        shapes.branch(clinic, *accounts[clinic.id], metrics=metrics[clinic.id])
+        shapes.branch(clinic, *accounts[clinic.id], metrics=metrics[clinic.id],
+                      contact=contacts.get(accounts[clinic.id][0]))
         for clinic in visible
     ]
 
@@ -714,7 +699,9 @@ def list_subscriptions(
     if after is not None:
         rows_q = rows_q.filter(Subscription.current_end >= after)
     rows_q = query.search(rows_q, browse.q, (Clinic.name, org.account_name(),
-                                             Subscription.plan_name))
+                                             Subscription.plan_name,
+                                             org.account_owner_name(), Clinic.phone,
+                                             Clinic.email))
 
     if browse.group_by:
         # MRR by tier and by billing cycle, and the Kanban column counts, in one
@@ -752,7 +739,9 @@ def list_subscriptions(
 
 def _subscriptions(db: Session, rows) -> List[Dict[str, Any]]:
     accounts = _accounts_of(db, [clinic for _, clinic in rows])
-    return [shapes.subscription(sub, *accounts[clinic.id], clinic=clinic)
+    contacts = org.contacts(db, [account for account, _ in accounts.values()])
+    return [shapes.subscription(sub, *accounts[clinic.id], clinic=clinic,
+                                contact=contacts.get(accounts[clinic.id][0]))
             for sub, clinic in rows]
 
 
@@ -898,7 +887,8 @@ def list_payments(
             SubscriptionPayment.status, statuses))
     rows_q = query.search(rows_q, browse.q, (
         Clinic.name, org.account_name(), SubscriptionPayment.plan_name,
-        SubscriptionPayment.coupon_code))
+        SubscriptionPayment.coupon_code, org.account_owner_name(), Clinic.phone,
+        Clinic.email))
 
     if browse.group_by:
         return query.group(rows_q, browse.group_by, PAYMENT_GROUPS,
@@ -906,7 +896,10 @@ def list_payments(
 
     def serialise(page_rows):
         accounts = _accounts_of(db, [clinic for _, clinic in page_rows])
-        return [shapes.payment(pay, *accounts[clinic.id]) for pay, clinic in page_rows]
+        contacts = org.contacts(db, [account for account, _ in accounts.values()])
+        return [shapes.payment(pay, *accounts[clinic.id],
+                               contact=contacts.get(accounts[clinic.id][0]))
+                for pay, clinic in page_rows]
 
     if browse.paging:
         rows_q = query.order(rows_q, browse.sort, PAYMENT_SORTS, changed.desc())

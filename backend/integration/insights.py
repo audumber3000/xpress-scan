@@ -15,8 +15,9 @@ dashboard, because they fail and grow independently:
 
 **Aggregates only, the rule `aggregates.py` holds.** Every query here is a
 COUNT, a SUM or a MAX grouped by clinic or by month. No row from `patients`,
-`appointments` or `invoices` is selected, and the only names in any response
-are clinic names — which the CRM already holds.
+`appointments` or `invoices` is selected. The only people named in any
+response are the clinics' owners, beside a clinic in a list of clinics — the
+CRM's customers, whom it already holds as People, and never a patient.
 
 **Months are calendar months in UTC**, labelled `YYYY-MM`, oldest first, the
 current month last and partial. A clinic in India sees a patient added at 2am
@@ -356,6 +357,9 @@ def activity_insights(
     top = sorted(per_account.items(),
                  key=lambda item: (-item[1]["end_customer_count"],
                                    -item[1]["transaction_count"], item[0]))[:TOP_ACCOUNTS]
+    # The busiest clinics are the ones worth a call — a renewal, a referral, a
+    # case study — so each one says who to call and on what.
+    contacts = org.contacts(db, [account for account, _ in top])
 
     return {
         "as_of": to_rfc3339(now),
@@ -374,6 +378,7 @@ def activity_insights(
             {
                 "account_id": org.account_id(account),
                 "account_name": names.get(account, ""),
+                "account_contact": contacts.get(account),
                 "end_customer_count": entry["end_customer_count"],
                 "transaction_count": entry["transaction_count"],
                 "last_activity_at": to_rfc3339(entry["last_activity_at"]),

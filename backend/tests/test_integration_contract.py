@@ -2067,3 +2067,57 @@ def test_insights_refuse_a_window_they_cannot_serve(client):
         response = client.get(integration.PREFIX + "/insights/revenue", headers=READONLY,
                               params={"months": months})
         assert response.status_code == 422
+
+
+# ── Who to contact ───────────────────────────────────────────────────────────
+#
+# Every list that names a clinic says who to reach there and how. The CRM's
+# tables are call lists as much as reports, and a clinic name with no doctor
+# and no number sent the reader off to look both up somewhere else.
+
+def test_a_subscription_says_who_to_call_about_the_clinic(client):
+    rows = dict((s["id"], s) for s in get(client, "/subscriptions")["data"])
+    # The group's owner — the lowest-id owner of the parent, whichever branch
+    # holds the subscription — with the clinic's number, because Priya has no
+    # mobile of her own on file.
+    for sub_id in ("100", "101"):
+        assert rows[sub_id]["account_contact"] == {
+            "name": "Priya Sharma",
+            "phone": "+919876543210",
+            "email": "priya@smiledental.in",
+            "country_code": "IN",
+        }
+    # The US clinic's number is read in the US, so its country travels with it.
+    assert rows["102"]["account_contact"]["name"] == "Dana Cole"
+    assert rows["102"]["account_contact"]["country_code"] == "US"
+
+
+def test_a_clinic_with_nobody_to_call_says_so_with_null(client):
+    rows = dict((s["id"], s) for s in get(client, "/subscriptions")["data"])
+    # The orphan has no owner, no phone and no email. `null`, not a dict of
+    # nulls — "nobody on file" is one fact.
+    assert rows["103"]["account_contact"] is None
+
+
+def test_a_payment_and_a_branch_say_it_too(client):
+    payments = dict((p["id"], p) for p in get(client, "/payments")["data"])
+    assert payments["200"]["account_contact"]["name"] == "Priya Sharma"
+    branches = dict((b["id"], b) for b in get(client, "/branches")["data"])
+    assert branches["2"]["account_contact"]["name"] == "Priya Sharma"
+    # And a branch carries its own line beside the owner's.
+    assert branches["1"]["phone"] == "+919876543210"
+    assert branches["2"]["phone"] is None
+
+
+def test_a_list_can_be_searched_by_the_doctor_or_the_number(client):
+    by_doctor = get(client, "/subscriptions", page=1, q="Priya")
+    assert sorted(s["id"] for s in by_doctor["data"]) == ["100", "101"]
+    by_number = get(client, "/branches", page=1, q="9876543210")
+    assert [b["id"] for b in by_number["data"]] == ["1"]
+
+
+def test_the_busiest_clinics_say_who_to_call(client):
+    top = get(client, "/insights/activity")["top_accounts"]
+    assert top[0]["account_name"] == "Smile Dental Care"
+    assert top[0]["account_contact"]["name"] == "Priya Sharma"
+    assert top[0]["account_contact"]["phone"] == "+919876543210"
