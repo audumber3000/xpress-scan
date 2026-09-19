@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { askForReviewOnSignIn } from '../utils/desktopReview';
 import SessionEndedModal from '../components/common/SessionEndedModal';
+import AccountSuspendedCard from '../components/common/AccountSuspendedCard';
 import { api } from '../utils/api';
 import posthog from 'posthog-js';
 
@@ -40,6 +41,10 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   // Set only when the clinic ended the session, never on a normal sign-out.
   const [sessionEnded, setSessionEnded] = useState(null);
+  // The whole account cut off, which is not the same thing: signing in again
+  // is exactly what will not help. Held here rather than on a page because it
+  // has to outrank every route — the card is the app until it is lifted.
+  const [suspended, setSuspended] = useState(null);
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -101,6 +106,16 @@ export const AuthProvider = ({ children }) => {
     };
     window.addEventListener('auth:expired', onExpired);
     return () => window.removeEventListener('auth:expired', onExpired);
+  }, []);
+
+  // The account is suspended. Fired by utils/api.js on a 403 carrying the
+  // card, which happens two ways: the sign-in itself is refused, or a session
+  // that was already open makes its next request. Both land here, so the
+  // clinic sees the same screen whichever came first.
+  useEffect(() => {
+    const onSuspended = (e) => setSuspended(e?.detail || null);
+    window.addEventListener('account:suspended', onSuspended);
+    return () => window.removeEventListener('account:suspended', onSuspended);
   }, []);
 
   // Re-fetch fresh permissions whenever the user returns to this tab.
@@ -248,12 +263,24 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={value}>
       {children}
-      {sessionEnded && (
+      {sessionEnded && !suspended && (
         <SessionEndedModal
           reason={sessionEnded}
           // Dismissing only puts them on the login screen the sign-out already
           // moved them to. There is nothing else this button can usefully do.
           onSignIn={() => setSessionEnded(null)}
+        />
+      )}
+      {/* Last, and above everything: a suspended account is the only thing
+          worth saying, and it outranks a session that also ended. */}
+      {suspended && (
+        <AccountSuspendedCard
+          card={suspended}
+          onSignOut={async () => {
+            await signOut();
+            setSuspended(null);
+            setSessionEnded(null);
+          }}
         />
       )}
     </AuthContext.Provider>

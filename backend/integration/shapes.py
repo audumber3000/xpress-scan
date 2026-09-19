@@ -21,6 +21,7 @@ from core import plans
 from . import plans_view
 
 from . import org, vocab
+from core import suspension
 from .wire import ext_id, micros, money, to_rfc3339
 
 # The human-readable half of `plan_name`. The billing cycle is deliberately not
@@ -122,6 +123,31 @@ def account(clinic, changed_at, branch_count: int, is_trial: bool = False,
         "updated_at": to_rfc3339(changed_at or clinic.updated_at or clinic.created_at),
         "deleted": False,
         "owner": contact(owner),
+        # Why this account is cut off, when `status` is `suspended`. Null
+        # otherwise. The CRM shows it on the clinic's record, so an operator
+        # who did not press the button can still answer "why is this clinic
+        # locked out" without opening the product.
+        "suspension": suspension_of(clinic),
+    }
+
+
+def suspension_of(clinic) -> Optional[Dict[str, Any]]:
+    """The suspension on an account, in the contract's words.
+
+    `reason_code` is the vocabulary `POST /accounts/{id}/suspend` accepts and
+    `GET /suspension-reasons` describes; `note` is what the operator wrote for
+    this clinic, and the customer has already read it.
+    """
+    if not suspension.is_suspended(clinic):
+        return None
+    code = getattr(clinic, "suspension_reason", None)
+    if not suspension.is_reason(code):
+        code = suspension.DEFAULT_REASON
+    return {
+        "reason_code": code,
+        "label": suspension.REASONS[code]["label"],
+        "note": getattr(clinic, "suspension_note", None) or None,
+        "since": to_rfc3339(getattr(clinic, "suspended_at", None)),
     }
 
 
@@ -523,6 +549,11 @@ def account_profile(account_id: str, clinic, completeness, capacity,
     return {
         "account_id": account_id,
         "as_of": to_rfc3339(as_of),
+        # Why this clinic is locked out, where it is. On the profile panel
+        # because that is the tab somebody opens when a clinic says "we cannot
+        # get in" — and the operator answering them is rarely the one who
+        # pressed the button.
+        "suspension": suspension_of(clinic),
         "completeness": completeness,
         "logo_url": clinic.logo_url or None,
         "tagline": clinic.tagline or None,

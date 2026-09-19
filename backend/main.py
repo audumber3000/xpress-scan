@@ -987,6 +987,13 @@ app.add_middleware(TrailingSlashMiddleware)
 from core.plan_state import install_readonly_lock
 install_readonly_lock(app)
 
+# Cut off entirely when the account is suspended — every request, not only
+# writes, answered with the card explaining why and how to reach a person.
+# Installed after the read-only lock so it runs first: a suspended clinic is
+# told it is suspended, not that its plan needs renewing. See core/suspension.py.
+from core.suspension import install_suspension_lock
+install_suspension_lock(app)
+
 
 # Report unhandled exceptions to PostHog error tracking (replaces Sentry).
 # Only genuine 500s reach here — FastAPI handles HTTPException/4xx inside the app.

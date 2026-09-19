@@ -54,6 +54,23 @@ Absent tokens mean the API refuses every request rather than running open.
 | `GET /accounts/{id}/operators`, `/messaging`, `/profile`, `/events` | the support panels — read on open, stored nowhere |
 | `GET /insights/accounts`, `/insights/activity`, `/insights/revenue` | totals and monthly series for the CRM's dashboards — counts only, never a patient |
 | `PATCH /accounts/{id}`, `POST /accounts/{id}/plan`, `/suspend`, `/activate` | the write actions, all idempotency-keyed |
+| `GET /suspension-reasons` | why an account may be suspended, and the words the clinic reads for each |
+
+## Suspension is enforced by the product, not by the CRM
+
+`POST /accounts/{id}/suspend` sets `clinics.status` on every site in the group,
+and `core/suspension.py` is what makes that mean something: every request from
+a suspended account is answered 403 with the card the clinic sees instead of
+the app, and signing in is refused with the same card.
+
+Until 2026-09-19 nothing read the column. The CRM could suspend an account, the
+clinic carried on working, and no screen anywhere would have told you. If you
+are adding another status the CRM can set, the lesson is that half of it —
+writing the column — is the half that looks finished.
+
+`reason_code` decides which message the clinic reads; the vocabulary and its
+copy live in `core/suspension.py` and are published so the CRM shows the
+operator those words before they confirm.
 
 ## Layout
 

@@ -53,6 +53,19 @@ export const authenticatedFetch = async (url, options = {}) => {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      // 403 with this shape is the account itself being cut off, not this
+      // person's permissions. It is checked before the 401 below because it is
+      // the one refusal that must not be read as "sign in again" — the whole
+      // point is that signing in again will not help, and the card says why.
+      // core/suspension.py writes every word of it.
+      if (response.status === 403 && errorData.detail?.reason === 'account_suspended') {
+        window.dispatchEvent(new CustomEvent('account:suspended', { detail: errorData.detail }));
+        const suspended = new Error(errorData.detail.title || 'This account has been suspended.');
+        suspended.status = 403;
+        suspended.detail = errorData.detail;
+        suspended.isAccountSuspended = true;
+        throw suspended;
+      }
       if (response.status === 401) {
         // Only clear storage on a real 401 — token is genuinely invalid/expired
         const hadSession = !!localStorage.getItem('auth_token');

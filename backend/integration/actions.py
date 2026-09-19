@@ -39,7 +39,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core import plans
+from core import plans, suspension
 
 from . import plans_view
 from core.countries import apply_to_clinic
@@ -90,7 +90,18 @@ class PlanChange(BaseModel):
 
 
 class SuspendBody(BaseModel):
+    # Why, for the audit trail: free text, what the operator would tell a
+    # colleague. Required to suspend.
     reason: Optional[str] = None
+    # Why, for the clinic: a code from GET /suspension-reasons, which decides
+    # the words on the card they see instead of the app. Optional, because a
+    # suspension with no code still has to work — it reads as the general
+    # policy message, which is what an unexplained suspension honestly is.
+    reason_code: Optional[str] = None
+    # One line for this clinic in particular ("three accounts on the same
+    # phone number"), shown under the standard message rather than replacing
+    # it. Anything written here is read by the customer.
+    note: Optional[str] = None
 
 
 class TrialRequest(BaseModel):
@@ -426,15 +437,31 @@ def suspend_account(account_id: str, body: SuspendBody,
     if not (body.reason or "").strip():
         raise ContractError(422, "reason_required",
                             "A reason is required to suspend an account.")
+    if body.reason_code and not suspension.is_reason(body.reason_code):
+        raise ContractError(
+            422, "unknown_reason_code",
+            "{!r} is not a suspension reason. See GET /suspension-reasons."
+            .format(body.reason_code),
+            {"reason_code": body.reason_code, "known": list(suspension.CODES)})
     if (clinic.status or "").lower() == "suspended":
         raise ContractError(409, "already_suspended",
                             "Account {} is already suspended.".format(account_id))
 
     was = clinic.status
+    code = body.reason_code or suspension.DEFAULT_REASON
+    note = (body.note or "").strip() or None
     changed = _set_group_status(db, clinic, "suspended")
+    # On every clinic in the group, so a branch signing in reads the same card
+    # as the account. `suspended_at` is what the card dates it by.
+    now = datetime.datetime.utcnow()
+    for member in db.query(Clinic).filter(org.belongs_to(Clinic, clinic.id)).all():
+        member.suspension_reason = code
+        member.suspension_note = note
+        member.suspended_at = now
     store.record(db, caller, "suspend", account_id, clinic.id, reason=body.reason,
                  before={"status": was},
-                 after={"status": "suspended", "clinics_changed": changed})
+                 after={"status": "suspended", "clinics_changed": changed,
+                        "reason_code": code, "note": note})
     db.flush()
 
     result = _account_response(db, account_id)
@@ -465,6 +492,13 @@ def activate_account(account_id: str, body: Optional[SuspendBody] = None,
 
     was = clinic.status
     changed = _set_group_status(db, clinic, "active", only_from="suspended")
+    # The reason goes with the suspension. Leaving it behind would put a stale
+    # "suspended for duplicate accounts" on a working clinic's record, and the
+    # card is built from it.
+    for member in db.query(Clinic).filter(org.belongs_to(Clinic, clinic.id)).all():
+        member.suspension_reason = None
+        member.suspension_note = None
+        member.suspended_at = None
     if clinic.id not in changed:
         # The account row itself was in some other state — cancelled, say.
         clinic.status = "active"

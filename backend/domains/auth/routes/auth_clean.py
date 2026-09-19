@@ -397,11 +397,29 @@ def _seed_clinic_defaults(db: Session, clinic_id: int):
 
 
 
+def refuse_if_suspended(db: Session, user) -> None:
+    """Stop a sign-in into a suspended account, with the card that says why.
+
+    The middleware would refuse every request this session went on to make, but
+    a token handed out first means the app loads, draws a dashboard, and only
+    then fills with errors. Refusing here is what makes "you are suspended" the
+    first and only thing the person sees.
+    """
+    from core.suspension import blocked_for_user
+
+    card = blocked_for_user(db, user)
+    if card is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=card)
+
+
 def build_auth_response(db: Session, user, token: str, message: str = "Login successful") -> AuthResponseDTO:
     """What every successful sign-in hands back: the token, the user with every
     clinic they belong to, and their current clinic. One builder, so the
     password login and the phone QR login cannot drift into returning
-    different shapes to the same app."""
+    different shapes to the same app.
+
+    Also the one place both of those check the account is not suspended."""
+    refuse_if_suspended(db, user)
     user_clinics_list = (
         db.query(Clinic)
         .join(User.clinics)
@@ -590,6 +608,8 @@ async def oauth_login(
             .all()
         )
         
+        refuse_if_suspended(db, user)
+
         user_dto = UserResponseDTO.from_orm(user)
         user_dto.clinics = [_enrich_clinic_dto(db, c) for c in user_clinics_list]
         

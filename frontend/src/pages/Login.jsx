@@ -228,6 +228,15 @@ const Login = () => {
         }
       }
 
+      // The account itself is suspended, not this sign-in. AuthContext is
+      // already showing the card that explains it, over this whole screen, so
+      // anything set here would only be a vaguer second message underneath it.
+      if (error?.isAccountSuspended) {
+        setError(null);
+        setPhase(null);
+        return;
+      }
+
       // The account has been cooled down after repeated wrong passwords. Shown
       // as a countdown they can watch rather than a flat refusal: almost
       // everybody who trips this is the owner misremembering their own
@@ -341,6 +350,13 @@ const Login = () => {
       // Closing the Google popup is a decision, not a failure. Announcing it
       // as an error tells somebody who changed their mind that something broke.
       if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+        setPhase(null);
+        return;
+      }
+
+      // Suspended is the card's message to give, here as on the email path.
+      if (error?.isAccountSuspended) {
+        setError(null);
         setPhase(null);
         return;
       }

@@ -68,6 +68,14 @@ class Clinic(Base):
     # retired in Aug 2026 and only survives as a read alias in plans.LEGACY_ALIASES.
     subscription_plan = Column(String, default=plans.DEFAULT_PLAN)
     status = Column(String, default='active')  # active, suspended, cancelled
+    # Why an account was cut off, and when. `status` records that it happened;
+    # these decide what the clinic is told when it tries to sign in. Written by
+    # the CRM through POST /integration/v1/accounts/{id}/suspend and cleared on
+    # activate. The vocabulary is core/suspension.py — never free text, so the
+    # same policy reads the same way whoever pressed the button.
+    suspension_reason = Column(String(40), nullable=True)
+    suspension_note = Column(Text, nullable=True)
+    suspended_at = Column(DateTime, nullable=True)
     razorpay_customer_id = Column(String, nullable=True)  # Razorpay customer ID
     cashfree_customer_id = Column(String, nullable=True)  # Cashfree customer ID
     logo_url = Column(String)
