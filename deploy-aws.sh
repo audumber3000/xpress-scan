@@ -465,6 +465,16 @@ run_migration "wallet_welcome_credit_10" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 
 # Channels are copied so a clinic running on email only stays that way.
 run_migration "appointment_reminder_2h_prefs" "DO \$do\$ BEGIN IF NOT EXISTS (SELECT 1 FROM applied_data_migrations WHERE key = 'appointment_reminder_2h_prefs_v1') THEN INSERT INTO notification_preferences (clinic_id, event_type, channels, is_enabled) SELECT p.clinic_id, 'appointment_reminder_2h', p.channels, false FROM notification_preferences p WHERE p.event_type = 'appointment_reminder' AND NOT EXISTS (SELECT 1 FROM notification_preferences q WHERE q.clinic_id = p.clinic_id AND q.event_type = 'appointment_reminder_2h'); INSERT INTO applied_data_migrations (key) VALUES ('appointment_reminder_2h_prefs_v1'); END IF; END \$do\$;"
 
+# ── Suspension: why an account was cut off ───────────────────────────────────
+#
+# `status = 'suspended'` has existed all along; these say what the clinic is
+# told when it tries to sign in. They must be added BEFORE the containers are
+# rebuilt below — SQLAlchemy selects every mapped column, so the new code
+# against the old schema breaks every clinic query. See core/suspension.py.
+run_migration "clinic_suspension_reason" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS suspension_reason VARCHAR(40)"
+run_migration "clinic_suspension_note"   "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS suspension_note TEXT"
+run_migration "clinic_suspended_at"      "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP"
+
 # ── Schema migration check (run against RDS) ──────────────────────────────────
 echo ""
 echo "▶ Running schema migration check against RDS..."
@@ -485,7 +495,7 @@ while IFS='|' read -r table required_cols; do
     fi
   done
 done <<'REQUIRED_COLUMNS'
-clinics|id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id license_number license_authority license_expiry account_manager_name account_manager_role account_manager_email account_manager_phone master_password_hash master_password_updated_at master_password_attempts master_password_locked_until case_paper_type document_doctors
+clinics|id clinic_code name address phone email gst_number specialization subscription_plan status razorpay_customer_id cashfree_customer_id logo_url invoice_template primary_color number_of_chairs timings created_at updated_at synced_at sync_status referred_by_code clinic_label parent_clinic_id country currency_code currency_symbol timezone tax_label tax_id license_number license_authority license_expiry account_manager_name account_manager_role account_manager_email account_manager_phone master_password_hash master_password_updated_at master_password_attempts master_password_locked_until case_paper_type document_doctors suspension_reason suspension_note suspended_at
 users|id email name first_name last_name role is_active permissions created_at updated_at email_report_unsubscribed
 user_clinics|user_id clinic_id role is_active created_at
 patients|id clinic_id name phone date_of_birth registered_on allergies created_at updated_at
