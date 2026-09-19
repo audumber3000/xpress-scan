@@ -2121,3 +2121,83 @@ def test_the_busiest_clinics_say_who_to_call(client):
     assert top[0]["account_name"] == "Smile Dental Care"
     assert top[0]["account_contact"]["name"] == "Priya Sharma"
     assert top[0]["account_contact"]["phone"] == "+919876543210"
+
+
+# ── Suspension ───────────────────────────────────────────────────────────────
+#
+# Suspending an account used to set `clinics.status` and nothing read it, so an
+# operator cut off exactly nobody. These cover the half the CRM can see: the
+# reason travelling with the suspension, and the account saying what it is.
+# `tests/test_suspension.py` covers what the clinic is shown.
+
+def _suspend(client, body, account="clinic:1"):
+    return client.post(integration.PREFIX + "/accounts/{}/suspend".format(account),
+                       headers=FULL, json=body)
+
+
+def test_the_reasons_a_clinic_can_be_told_are_published(client):
+    reasons = {r["code"]: r for r in get(client, "/suspension-reasons")["data"]}
+    assert "duplicate_accounts" in reasons
+    duplicate = reasons["duplicate_accounts"]
+    # The operator sees the exact words the clinic will read, before confirming.
+    assert duplicate["title"] and duplicate["message"]
+    assert any("more than once" in example for example in duplicate["examples"])
+    assert get(client, "/meta")["capabilities"]["suspension_reasons"] is True
+
+
+def test_a_suspension_carries_the_reason_the_clinic_is_shown(client, db_session):
+    response = _suspend(client, {
+        "reason": "Three accounts on one phone number",
+        "reason_code": "duplicate_accounts",
+        "note": "Accounts 1, 8 and 22 share a number.",
+    })
+    assert response.status_code == 200, response.text
+
+    for clinic_id in (1, 2, 3):   # the account and both of its branches
+        clinic = db_session.query(Clinic).filter(Clinic.id == clinic_id).first()
+        assert clinic.status == "suspended"
+        assert clinic.suspension_reason == "duplicate_accounts"
+        assert clinic.suspension_note == "Accounts 1, 8 and 22 share a number."
+        assert clinic.suspended_at is not None
+
+
+def test_the_account_says_why_it_is_suspended(client):
+    _suspend(client, {"reason": "Copying us", "reason_code": "copying_platform"})
+    account = get(client, "/accounts/clinic:1")
+    assert account["status"] == "suspended"
+    assert account["suspension"]["reason_code"] == "copying_platform"
+    assert account["suspension"]["label"] == "Copying the platform"
+    assert account["suspension"]["since"]
+
+
+def test_an_account_that_is_not_suspended_says_nothing(client):
+    assert get(client, "/accounts/clinic:1")["suspension"] is None
+
+
+def test_a_reason_nobody_defined_is_refused(client):
+    response = _suspend(client, {"reason": "because", "reason_code": "i_said_so"})
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "unknown_reason_code"
+    assert "duplicate_accounts" in body["error"]["details"]["known"]
+
+
+def test_a_suspension_with_no_code_still_suspends(client, db_session):
+    # The CRM before this feature, and any other caller. It reads as the
+    # general policy message, which is what an unexplained suspension is.
+    assert _suspend(client, {"reason": "Told to"}).status_code == 200
+    clinic = db_session.query(Clinic).filter(Clinic.id == 1).first()
+    assert clinic.suspension_reason == "policy_violation"
+
+
+def test_activating_takes_the_reason_away_with_it(client, db_session):
+    _suspend(client, {"reason": "Duplicate", "reason_code": "duplicate_accounts"})
+    response = client.post(integration.PREFIX + "/accounts/clinic:1/activate",
+                           headers=FULL, json={"reason": "Sorted out"})
+    assert response.status_code == 200, response.text
+    for clinic_id in (1, 2, 3):
+        clinic = db_session.query(Clinic).filter(Clinic.id == clinic_id).first()
+        assert clinic.status == "active"
+        assert clinic.suspension_reason is None
+        assert clinic.suspension_note is None
+        assert clinic.suspended_at is None

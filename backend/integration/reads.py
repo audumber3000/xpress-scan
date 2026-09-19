@@ -22,7 +22,7 @@ from models import Clinic, Subscription, SubscriptionPayment, User
 
 from .leads import GrowthLead
 
-from core import plans
+from core import plans, suspension
 
 from . import aggregates, org, plans_view, query, shapes, vocab
 from .auth import Caller, require_read
@@ -102,6 +102,11 @@ def get_meta(caller: Caller = Depends(require_read)):
             "change_plan": True,
             "plans": True,
             "suspend": True,
+            # The reasons a suspension can carry, and the words the clinic is
+            # shown for each. Published for the same reason the plan catalogue
+            # is: a second copy of these sentences in the CRM is a second copy
+            # to keep true. See core/suspension.py.
+            "suspension_reasons": True,
             "start_trial": True,
             # MolarPlus hard-deletes. There is no soft-delete column to read, so
             # a departed account cannot appear in an incremental response with
@@ -111,6 +116,19 @@ def get_meta(caller: Caller = Depends(require_read)):
         },
         "reporting_currency": "INR",
     }
+
+
+# ── Suspension reasons ───────────────────────────────────────────────────────
+
+@router.get("/suspension-reasons", tags=["actions"], operation_id="listSuspensionReasons")
+def list_suspension_reasons(caller: Caller = Depends(require_read)):
+    """Why an account may be suspended, and what the clinic is told for each.
+
+    The CRM shows the operator these words before they confirm, so nobody cuts
+    a clinic off without seeing the message that clinic will read. `code` is
+    what `POST /accounts/{id}/suspend` accepts back.
+    """
+    return {"data": suspension.catalogue()}
 
 
 # ── Plans ────────────────────────────────────────────────────────────────────

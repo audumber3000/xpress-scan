@@ -249,6 +249,11 @@ async def mobile_login(request: Request, db: Session = Depends(get_db)):
         except Exception as device_error:
             print(f"Device registration error (non-fatal): {device_error}")
 
+        # The account itself, not just the person: a suspended clinic is
+        # refused here with the card that explains why, exactly as on the web.
+        from domains.auth.routes.auth_clean import refuse_if_suspended
+        refuse_if_suspended(db, user)
+
         # Create JWT tokens for mobile
         access_token = create_jwt_token(user.id)
         refresh_token = create_refresh_token(user.id)
@@ -351,6 +356,11 @@ async def mobile_oauth_login(request: Request, db: Session = Depends(get_db)):
             raise
         except Exception as device_error:
             print(f"Device registration error (non-fatal): {device_error}")
+
+        # The account itself, not just the person: a suspended clinic is
+        # refused here with the card that explains why, exactly as on the web.
+        from domains.auth.routes.auth_clean import refuse_if_suspended
+        refuse_if_suspended(db, user)
 
         # Create JWT tokens for mobile
         access_token = create_jwt_token(user.id)
