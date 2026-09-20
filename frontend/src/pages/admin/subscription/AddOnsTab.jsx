@@ -63,7 +63,6 @@ const AddOnsTab = ({ clinicName, isOwner, onBuy }) => {
             key={item.key}
             item={item}
             cycle={cycle}
-            taxLabel={catalogue.tax_label}
             clinicName={clinicName}
             isOwner={isOwner}
             managerEmail={catalogue.gbp_manager_email}

@@ -68,6 +68,7 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         account_verification_job,
         wareach_reconcile_job,
         addon_expiry_job,
+        plan_renewal_reminder_job,
     )
 
     sched.add_job(
@@ -168,6 +169,15 @@ def _register_jobs(sched: AsyncIOScheduler) -> None:
         trigger="cron",
         minute=27,
         id="addon_expiry",
+        replace_existing=True,
+    )
+
+    # Paid plans do not renew by themselves; say so 7, 3 and 1 days out.
+    sched.add_job(
+        plan_renewal_reminder_job,
+        trigger="cron",
+        minute=33,
+        id="plan_renewal_reminder",
         replace_existing=True,
     )
 

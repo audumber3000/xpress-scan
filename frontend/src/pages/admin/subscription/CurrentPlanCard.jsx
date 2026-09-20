@@ -93,7 +93,7 @@ const CurrentPlanCard = ({
                   {isGranted ? formatPrice(0, plan.currency) : formatPrice(plan.monthly, plan.currency)}
                 </p>
                 <p className="text-xs text-gray-400">
-                  per month{catalogue.tax_label && !isGranted ? ` plus ${catalogue.tax_label}` : ''}
+                  per month
                 </p>
               </>
             )}

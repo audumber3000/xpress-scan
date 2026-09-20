@@ -41,7 +41,7 @@ const renderCard = (overrides = {}, props = {}) => {
   act(() => {
     root.render(
       <MemoryRouter>
-        <AddOnCard item={{ ...base, ...overrides }} cycle="monthly" taxLabel="GST" clinicName="Smile Dental"
+        <AddOnCard item={{ ...base, ...overrides }} cycle="monthly" clinicName="Smile Dental"
                    isOwner onBuy={onBuy} {...props} />
       </MemoryRouter>
     )
@@ -67,7 +67,7 @@ describe('AddOnCard', () => {
     const onBuy = renderCard()
     expect(has('₹289')).toBe(true)
     expect(has('/ month')).toBe(true)
-    expect(has(/plus GST/)).toBe(true)
+    expect(has(/GST/)).toBe(false)
     expect(has(/included when you move to Pro/)).toBe(true)
     click(button(/Add/))
     expect(onBuy).toHaveBeenCalledWith('own_whatsapp', 'monthly')

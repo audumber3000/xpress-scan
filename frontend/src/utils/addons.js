@@ -40,8 +40,8 @@ const FALLBACK_ADDONS = [
     icon: 'google_business',
     availability: 'live',
     fulfilment: 'managed',
-    price: { monthly: 299, annual: 2870 },
-    included_from_plan: null,
+    price: { monthly: 150, annual: 1440 },
+    included_from_plan: 'Pro',
     manage_link: null,
   },
   {
@@ -51,7 +51,7 @@ const FALLBACK_ADDONS = [
     icon: 'upi',
     availability: 'coming_soon',
     fulfilment: 'auto',
-    price: null,
+    price: { monthly: 200, annual: 1920 },
     included_from_plan: 'Pro',
     manage_link: '/admin/integrations/payments',
   },
@@ -63,7 +63,7 @@ const FALLBACK_ADDONS = [
     availability: 'coming_soon',
     fulfilment: 'auto',
     price: { monthly: 350, annual: 3360 },
-    included_from_plan: null,
+    included_from_plan: 'Pro',
     manage_link: '/admin/integrations/xray',
   },
 ];

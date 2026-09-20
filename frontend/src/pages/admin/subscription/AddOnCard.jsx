@@ -66,7 +66,7 @@ const ServiceSteps = ({ current, managerEmail }) => {
   );
 };
 
-const AddOnCard = ({ item, cycle, taxLabel, clinicName, isOwner, managerEmail, onBuy }) => {
+const AddOnCard = ({ item, cycle, clinicName, isOwner, managerEmail, onBuy }) => {
   const [notified, setNotified] = useState(false);
   const annual = cycle === 'annual';
   const icon = ICONS[item.icon] || ICONS.xray;
@@ -77,6 +77,9 @@ const AddOnCard = ({ item, cycle, taxLabel, clinicName, isOwner, managerEmail, o
     if (state === 'included') {
       return <p className="text-2xl font-extrabold tracking-tight text-[#1f6b72]">Included</p>;
     }
+    // A plan that already covers it is not being sold anything, even while the
+    // add-on is still being built.
+    if (item.included_by_plan) return null;
     if (!item.priced) {
       return item.included_from_plan
         ? <p className="text-sm font-semibold text-gray-500">Included with {item.included_from_plan}</p>
@@ -93,7 +96,6 @@ const AddOnCard = ({ item, cycle, taxLabel, clinicName, isOwner, managerEmail, o
         </div>
         <p className="mt-0.5 text-[11px] text-gray-400">
           {annual && item.annual_monthly ? `${formatPrice(Math.round(item.annual_monthly), item.currency)} a month, save ${item.annual_pct_off}%` : 'Billed monthly'}
-          {taxLabel ? ` · plus ${taxLabel}` : ''}
         </p>
       </div>
     );
@@ -110,6 +112,17 @@ const AddOnCard = ({ item, cycle, taxLabel, clinicName, isOwner, managerEmail, o
   };
 
   const action = () => {
+    const ask = (label) => (
+      <a
+        href={`https://wa.me/${SUPPORT_PHONE_RAW}?text=${encodeURIComponent(`Hi MolarPlus team, I'd like to add ${item.label} for ${clinicName || 'my clinic'}.`)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-h-[2.5rem] items-center gap-1.5 text-sm font-semibold text-[#29828a] hover:underline"
+      >
+        {label} <ArrowRight size={14} />
+      </a>
+    );
+
     const buy = (label, style = 'solid') => (
       <button
         onClick={() => onBuy(item.key, cycle)}
@@ -135,11 +148,16 @@ const AddOnCard = ({ item, cycle, taxLabel, clinicName, isOwner, managerEmail, o
       case 'active':
         return buy('Renew early', 'outline');
       case 'included':
-        return item.manage_link ? (
-          <Link to={item.manage_link} className="inline-flex min-h-[2.5rem] items-center gap-1.5 text-sm font-semibold text-[#29828a] hover:underline">
-            Set it up <ArrowRight size={14} />
-          </Link>
-        ) : null;
+        if (item.manage_link) {
+          return (
+            <Link to={item.manage_link} className="inline-flex min-h-[2.5rem] items-center gap-1.5 text-sm font-semibold text-[#29828a] hover:underline">
+              Set it up <ArrowRight size={14} />
+            </Link>
+          );
+        }
+        // Included, but a person has to do the work. Without this the clinic
+        // is told it has something and given no way to start it.
+        return item.fulfilment === 'managed' ? ask('Ask us to start') : null;
       case 'coming_soon':
         return (
           <button
@@ -151,16 +169,7 @@ const AddOnCard = ({ item, cycle, taxLabel, clinicName, isOwner, managerEmail, o
           </button>
         );
       case 'unavailable':
-        return (
-          <a
-            href={`https://wa.me/${SUPPORT_PHONE_RAW}?text=${encodeURIComponent(`Hi MolarPlus team, I'd like to add ${item.label} for ${clinicName || 'my clinic'}.`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-[2.5rem] items-center gap-1.5 text-sm font-semibold text-[#29828a] hover:underline"
-          >
-            Contact us <ArrowRight size={14} />
-          </a>
-        );
+        return ask('Contact us');
       default:
         return null;
     }

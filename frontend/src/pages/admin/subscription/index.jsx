@@ -161,6 +161,7 @@ const Subscription = () => {
           startingTrial={startingTrial}
           onStartTrial={handleStartTrial}
           onChoosePlan={handleChoosePlan}
+          onOpenAddons={() => { setActiveTab('addons'); window.scrollTo?.({ top: 0, behavior: 'smooth' }); }}
         />
       )}
 
