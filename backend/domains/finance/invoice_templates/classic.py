@@ -14,6 +14,7 @@ from domains.infrastructure.services.pdf_fields import (
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
 from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
+from domains.finance.invoice_templates._common import invoice_qr_html, footer_with_qr
 
 
 # ── Amount-in-words (Indian numbering) ───────────────────────────────────────
@@ -184,6 +185,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
         inv_tax=inv_tax, discount=discount, taxable=taxable,
         currency=currency, tax_label=tax_label, is_india=is_india,
         vis=vis, letterhead=letterhead,
+        qr_html=invoice_qr_html(invoice, config),
     )
 
 
@@ -197,7 +199,7 @@ def _render_indian_tax(
     invoice_date, subtotal, total, inv_tax, discount, taxable,
     doctor_header=None, bal=None,
     doctor_signature='', currency='₹', tax_label='GST No.', is_india=True,
-    vis=None, letterhead=None,
+    vis=None, letterhead=None, qr_html='',
 ):
     from domains.infrastructure.services.pdf_fields import (
         ALL_VISIBLE, LETTERHEAD_OFF, page_css,
@@ -535,7 +537,7 @@ body {{
       {signature_box}
     </div>
 
-    {f'<div style="text-align:center;color:#888;font-size:10px;margin-top:16px;border-top:1px solid #eee;padding-top:10px;">{footer_text}</div>' if footer_text else ''}
+    {footer_with_qr(f'<div style="text-align:center;color:#888;font-size:10px;margin-top:16px;border-top:1px solid #eee;padding-top:10px;">{footer_text}</div>' if footer_text else '', qr_html)}
 
   </div>
   {'' if letterhead.enabled else '<div class="color-strip"></div>'}

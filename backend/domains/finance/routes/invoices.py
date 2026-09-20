@@ -4,6 +4,8 @@ from sqlalchemy import desc, func, or_, text
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from domains.finance.invoice_pdf_engine import generate_invoice_html
+from domains.finance.invoice_link import ensure_public_token
+from domains.infrastructure.services.pdf_fields import resolve_qr_enabled
 from domains.finance.receipt_pdf_engine import generate_receipt_html
 import os
 import csv
@@ -3060,6 +3062,12 @@ async def download_invoice_pdf(
         ).first()
 
         # Generate HTML invoice template
+        # Mint the QR token before rendering, never during: the code is about
+        # to be printed, and it must point at a token that is already saved.
+        # Only for clinics that switched the QR on, so an opted-out clinic's
+        # invoices never acquire a public URL at all.
+        if resolve_qr_enabled(config):
+            ensure_public_token(db, invoice)
         html_content = generate_invoice_html(invoice, clinic, config)
         
         # Convert to PDF
@@ -3311,6 +3319,12 @@ async def send_invoice_via_whatsapp(
         ).first()
 
         # 2. Generate PDF using engine
+        # Mint the QR token before rendering, never during: the code is about
+        # to be printed, and it must point at a token that is already saved.
+        # Only for clinics that switched the QR on, so an opted-out clinic's
+        # invoices never acquire a public URL at all.
+        if resolve_qr_enabled(config):
+            ensure_public_token(db, invoice)
         html_content = generate_invoice_html(invoice, clinic, config)
         pdf_path = html_template_to_pdf(html_content)
         

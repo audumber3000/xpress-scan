@@ -55,7 +55,7 @@ const EDGES = [
 ];
 
 const DEFAULT_CONFIGS = {
-  invoice:      { template_id: 'classic', logo_url: '', primary_color: '#FF9800', footer_text: '', show: { ...ALL_SHOWN }, letterhead: { ...LETTERHEAD_OFF } },
+  invoice:      { template_id: 'classic', logo_url: '', primary_color: '#FF9800', footer_text: '', show: { ...ALL_SHOWN }, letterhead: { ...LETTERHEAD_OFF }, qr: { enabled: false } },
   prescription: { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', show: { ...ALL_SHOWN }, letterhead: { ...LETTERHEAD_OFF } },
   consent:      { template_id: 'classic', logo_url: '', primary_color: '#2a276e', footer_text: '', show: { ...ALL_SHOWN }, letterhead: { ...LETTERHEAD_OFF } },
 };
@@ -217,6 +217,10 @@ const TemplatesEditor = () => {
             // retroactively hide itself for clinics who saved before it existed.
             show: { ...ALL_SHOWN, ...(c.config_json?.show || {}) },
             letterhead: { ...LETTERHEAD_OFF, ...(c.config_json?.letterhead || {}) },
+            // Off unless saved on. The opposite of `show` on purpose: a QR code
+            // is something that appears, and nothing should appear on a
+            // clinic's bills because they saved before this toggle existed.
+            qr: { enabled: false, ...(c.config_json?.qr || {}) },
           };
         }
       });
@@ -258,6 +262,7 @@ const TemplatesEditor = () => {
   // deps rule verify this instead of being told to ignore it.
   const showKey = JSON.stringify(cfg.show ?? {});
   const letterheadKey = JSON.stringify(cfg.letterhead ?? {});
+  const qrKey = JSON.stringify(cfg.qr ?? {});
   // Same trick for the doctor list: it is rebuilt on every keystroke, so its
   // serialised form is what the preview actually depends on.
   const doctorsKey = JSON.stringify(doctors);
@@ -273,7 +278,7 @@ const TemplatesEditor = () => {
           primary_color: cfg.primary_color,
           footer_text: cfg.footer_text,
           logo_url: cfg.logo_url || null,
-          config_json: { show: JSON.parse(showKey), letterhead: JSON.parse(letterheadKey) },
+          config_json: { show: JSON.parse(showKey), letterhead: JSON.parse(letterheadKey), qr: JSON.parse(qrKey) },
           // Lives on the clinic, so it rides alongside config_json rather than
           // inside it — the preview needs it before it has been saved.
           document_doctors: JSON.parse(doctorsKey),
@@ -293,7 +298,7 @@ const TemplatesEditor = () => {
     }, 350);
     return () => { cancelled = true; clearTimeout(handle); };
   }, [activeTab, cfg.template_id, cfg.primary_color, cfg.footer_text, cfg.logo_url,
-      showKey, letterheadKey, doctorsKey, loading]);
+      showKey, letterheadKey, qrKey, doctorsKey, loading]);
 
   // ── Mutators ────────────────────────────────────────────────────────────────
   const updateField = (field, value) => {
@@ -335,7 +340,14 @@ const TemplatesEditor = () => {
         logo_url:      null,
         primary_color: cfg.primary_color,
         footer_text:   cfg.footer_text,
-        config_json:   { show: cfg.show, letterhead: cfg.letterhead },
+        config_json:   {
+          show: cfg.show,
+          letterhead: cfg.letterhead,
+          // Invoice only. Prescriptions and consent forms have no public view
+          // for a code to point at, so writing the key there would be a
+          // setting that does nothing.
+          ...(activeTab === 'invoice' ? { qr: cfg.qr } : {}),
+        },
       });
       // The doctor panel belongs to the clinic, so it is saved to the clinic —
       // once, not once per tab. Only when it changed: a PUT on every colour
@@ -664,6 +676,38 @@ const TemplatesEditor = () => {
                     </p>
                   )}
                 </Section>
+
+                {/* Link-to-invoice QR code.
+                    Invoice only. Off until a clinic turns it on, because it puts
+                    a link to a patient's bill on paper, and that is the clinic's
+                    call to make rather than ours. */}
+                {activeTab === 'invoice' && (
+                  <Section title="QR code on invoice">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!cfg.qr?.enabled}
+                        onChange={() => updateField('qr', { ...cfg.qr, enabled: !cfg.qr?.enabled })}
+                        className="mt-0.5 w-4 h-4 accent-[#29828a]"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-gray-800">
+                          Print a QR code that opens this invoice
+                        </span>
+                        <span className="block text-xs text-gray-500 mt-0.5">
+                          Bottom left of the footer. The patient scans it and the bill opens
+                          on their phone, no app or login needed.
+                        </span>
+                      </span>
+                    </label>
+                    {cfg.qr?.enabled && (
+                      <p className="text-xs text-gray-500 mt-3 leading-relaxed">
+                        Anyone holding the printed bill can open it online. Turn this off
+                        and every code you have printed stops working straight away.
+                      </p>
+                    )}
+                  </Section>
+                )}
 
                 {/* Pre-printed letterhead.
                     Plenty of clinics already own headed paper and want our

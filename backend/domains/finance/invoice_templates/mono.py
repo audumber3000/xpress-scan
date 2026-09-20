@@ -17,6 +17,7 @@ from domains.infrastructure.services.pdf_fields import (
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
 from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
+from domains.finance.invoice_templates._common import invoice_qr_html, footer_with_qr
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -94,6 +95,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
         _total_row = ('<tr class="grand"><td class="lbl" colspan="3">Total</td>'
                       f'<td class="num">{money(d, d.total)}</td></tr>')
         _balance_rows = ''
+    _qr = invoice_qr_html(invoice, config)
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
@@ -180,7 +182,7 @@ table.items tr.grand td {{ background:#f2f2f2; font-weight:700; font-size:13px; 
     <td style="text-align:right;">{signature_block(d)}</td>
   </tr></table>
 
-  {f'<div class="clinic-footer">{d.footer_text}</div>' if d.footer_text else ''}
+  {footer_with_qr(f'<div class="clinic-footer">{d.footer_text}</div>' if d.footer_text else '', _qr)}
 </div>
 
 </body></html>"""

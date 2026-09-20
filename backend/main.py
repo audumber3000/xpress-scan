@@ -346,6 +346,16 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS consent_defaults_seeded BOOLEAN DEFAULT FALSE"
             ))
+            # The token behind the link-to-invoice QR code. Unique, because it
+            # is the only thing the public endpoint looks an invoice up by.
+            # Postgres allows many NULLs under a unique index, which is what
+            # every invoice from a clinic that never turns the QR on will hold.
+            conn.execute(text(
+                "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS public_token VARCHAR(32)"
+            ))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_invoices_public_token ON invoices (public_token)"
+            ))
 
             # ── Added 2026-08-13 ────────────────────────────────────────────
             # Master password, geofenced attendance, device location, staff pay.
@@ -1118,6 +1128,10 @@ from domains.forms.routes import forms as patient_forms
 from domains.forms.routes import public_forms
 app.include_router(patient_forms.router, prefix="/api/v1/forms", tags=["forms"])
 app.include_router(public_forms.router, prefix="/api/v1/public/forms", tags=["public-forms"])
+# What the QR code on a printed invoice opens. Unauthenticated: the token is
+# the credential. See domains/finance/routes/public_invoices.py.
+from domains.finance.routes import public_invoices
+app.include_router(public_invoices.router, prefix="/api/v1/public/invoices", tags=["public-invoices"])
 
 # Insurance: who the clinic bills, what a patient is covered for, and the split.
 from domains.insurance.routes import insurance as insurance_routes

@@ -20,7 +20,15 @@ Two rules keep this from silently rewriting documents that already exist:
 Stored shape, namespaced so config_json stays free for future settings:
 
     {"show": {"tax_number": true, "contact": true, ...},
-     "letterhead": {"enabled": true, "top_mm": 45, ...}}
+     "letterhead": {"enabled": true, "top_mm": 45, ...},
+     "qr": {"enabled": true}}
+
+The invoice QR code is NOT one of the `show` flags, and cannot be. Those flags
+only ever hide something that already printed; a QR code is a new element that
+appears. Made a `show` flag it would default to True under rule 1, and every
+invoice every clinic has ever issued would grow a QR code on its next render.
+So it lives in its own namespace and reads the way letterhead does: strictly
+opt-in, and anything malformed means off.
 """
 from dataclasses import dataclass, replace
 
@@ -252,6 +260,33 @@ def sanitize_letterhead(raw) -> dict:
     return cleaned
 
 
+def sanitize_qr(raw) -> dict:
+    """Normalise the QR setting into its stored shape, or None.
+
+    Strictly opt-in like letterhead: only an explicit yes turns it on. A QR code
+    that appeared on a clinic's invoices because a malformed payload happened to
+    read as truthy would put a public link to patient bills on paper nobody
+    agreed to print it on.
+    """
+    if not isinstance(raw, dict):
+        return None
+    return {'enabled': _as_enabled(raw.get('enabled'))}
+
+
+def resolve_qr_enabled(config) -> bool:
+    """Whether this clinic prints the link-to-invoice QR code. False unless the
+    config says, unambiguously, yes."""
+    if config is None:
+        return False
+    raw = getattr(config, 'config_json', None)
+    if not isinstance(raw, dict):
+        return False
+    qr = raw.get('qr')
+    if not isinstance(qr, dict):
+        return False
+    return _as_enabled(qr.get('enabled'))
+
+
 def sanitize_config_json(raw) -> dict:
     """Whitelist a whole `config_json` blob before it is stored or previewed.
 
@@ -274,6 +309,12 @@ def sanitize_config_json(raw) -> dict:
     letterhead = sanitize_letterhead(raw.get('letterhead'))
     if letterhead:
         cleaned['letterhead'] = letterhead
+    # Without this line the QR toggle would be silently stripped on save, and
+    # the clinic would tick it, watch the preview ignore it, and reasonably
+    # conclude it was broken — the exact failure this function exists to stop.
+    qr = sanitize_qr(raw.get('qr'))
+    if qr:
+        cleaned['qr'] = qr
     return cleaned or None
 
 

@@ -383,7 +383,13 @@ def preview_template(
 
     if category == "invoice":
         from domains.finance.invoice_pdf_engine import generate_invoice_html
-        html = generate_invoice_html(sample_invoice(), clinic, config)
+        inv = sample_invoice()
+        # The preview is where a clinic decides whether it wants the QR, so it
+        # has to show one. "preview" is a reserved token: the public page
+        # recognises it and says this is a sample, so an owner who scans the
+        # preview to test it learns something instead of hitting a dead link.
+        inv.public_token = "preview"
+        html = generate_invoice_html(inv, clinic, config)
     elif category == "prescription":
         from domains.medical.services.prescription_service import PrescriptionService
         svc = PrescriptionService(db)

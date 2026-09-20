@@ -24,6 +24,7 @@ from domains.infrastructure.services.pdf_fields import (
 )
 from domains.finance.invoice_templates.discount_block import render_discount_block
 from domains.finance.invoice_templates.payment_block import as_on_line, balance_rows
+from domains.finance.invoice_templates._common import invoice_qr_html, footer_with_qr
 
 
 def render_invoice(invoice, clinic, config=None) -> str:
@@ -232,6 +233,7 @@ def render_invoice(invoice, clinic, config=None) -> str:
       </div>
     </div>'''
 
+    _qr = invoice_qr_html(invoice, config)
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <style>
@@ -455,7 +457,7 @@ body {{
     {signature_box}
   </div>
 
-  {f'<div class="disclaimer">{footer_text}</div>' if footer_text else ''}
+  {footer_with_qr(f'<div class="disclaimer">{footer_text}</div>' if footer_text else '', _qr)}
 
 </div>
 </body></html>"""

@@ -243,3 +243,83 @@ def signature_block(d, align: str = 'right', with_qualifications: bool = True) -
         f'display:inline-block;font-size:10px;color:#6B7280;">'
         f'{d.doctor_name or "Authorised Signatory"}{quals}</div></div>'
     )
+
+
+# ── The link-to-invoice QR code ─────────────────────────────────────────────
+#
+# One helper that every variant calls on its last line, including classic and
+# modern, which otherwise keep their own copies of everything. It has to live
+# in one place: seven hand-placed QR codes would drift into seven sizes, and a
+# code printed too small is a code that does not scan.
+
+# Big enough to scan from a printed page at arm's length, small enough to sit
+# beside a one-line footer without making the bill feel like a boarding pass.
+_QR_SIZE = '19mm'
+
+
+def invoice_qr_html(invoice, config) -> str:
+    """The QR block, or '' when there is nothing to draw.
+
+    Nothing is drawn unless the clinic has switched it on AND this invoice
+    already has a token. The second condition is what guarantees a printed code
+    never scans to a 404: tokens are minted and committed by the route before
+    rendering, so a render that somehow runs without one prints no code rather
+    than a dead one.
+    """
+    # Imported here, not at module top: pdf_fields and invoice_link are only
+    # needed when a clinic has opted in, and keeping the import local means the
+    # pinned golden-test renders load exactly what they always loaded.
+    from domains.infrastructure.services.pdf_fields import resolve_qr_enabled
+    if not resolve_qr_enabled(config):
+        return ''
+    token = getattr(invoice, 'public_token', None)
+    if not token:
+        return ''
+    from domains.finance.invoice_link import public_invoice_url, qr_data_uri
+    src = qr_data_uri(public_invoice_url(token))
+    return (
+        '<table class="mp-qr" style="border-collapse:collapse;">'
+        '<tr>'
+        f'<td style="padding:0;vertical-align:middle;">'
+        f'<img src="{src}" alt="" style="width:{_QR_SIZE};height:{_QR_SIZE};display:block;"></td>'
+        '<td style="padding:0 0 0 8px;vertical-align:middle;">'
+        '<div style="font-size:8.5px;font-weight:700;color:#111827;line-height:1.3;">'
+        'Scan to view this invoice</div>'
+        '<div style="font-size:7.5px;color:#6B7280;line-height:1.35;margin-top:1px;">'
+        'Opens on your phone.<br>No app or login needed.</div>'
+        '</td></tr></table>'
+    )
+
+
+def footer_with_qr(footer_html: str, qr_html: str) -> str:
+    """Seat the QR code at the bottom left, beside the footer line.
+
+    Returns `footer_html` untouched when there is no QR. Not "equivalent" —
+    untouched, the same string object: every clinic that has not opted in must
+    get a byte-identical document, and the golden tests assert exactly that.
+
+    With a QR, the last row of the bill becomes a two-cell table: the code and
+    its caption on the left, the clinic's own footer line on the right in
+    whatever style its layout gives it. A table rather than flex because
+    WeasyPrint's table layout is the part of it that has never surprised
+    anyone.
+
+    The footer line keeps its own markup. What is neutralised is only the
+    vertical spacing it brought for standing alone at the foot of the page —
+    its top margin, padding and rule — which inside this row would push it
+    below the code instead of level with it.
+    """
+    if not qr_html:
+        return footer_html
+    return (
+        '<style>'
+        '.mp-qr-row .mp-qr-foot > *{margin-top:0!important;padding-top:0!important;'
+        'border-top:0!important;}'
+        '</style>'
+        '<table class="mp-qr-row" style="width:100%;border-collapse:collapse;'
+        'margin-top:14px;page-break-inside:avoid;">'
+        '<tr>'
+        f'<td style="padding:0;vertical-align:bottom;width:1%;white-space:nowrap;">{qr_html}</td>'
+        f'<td class="mp-qr-foot" style="padding:0 0 0 16px;vertical-align:middle;">{footer_html}</td>'
+        '</tr></table>'
+    )

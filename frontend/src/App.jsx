@@ -67,6 +67,7 @@ import Paperwork from "./pages/paperwork";
 import Reports from "./pages/Reports";
 import AddClinic from "./pages/AddClinic";
 import ConsentSign from "./pages/ConsentSign";
+import PublicInvoice from "./pages/PublicInvoice";
 import FormFill from "./pages/FormFill";
 import ConsentPreview from "./pages/ConsentPreview";
 import SelectClinic from "./pages/SelectClinic";
@@ -287,6 +288,9 @@ function AppContent() {
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/dental-demo" element={<DentalChartDemo />} />
           <Route path="/consent/sign/:token" element={<ConsentSign />} />
+          {/* What the QR code on a printed invoice opens. Public: the token
+              is the credential, and the patient has no account. */}
+          <Route path="/i/:token" element={<PublicInvoice />} />
           <Route path="/form/fill/:token" element={<FormFill />} />
           <Route path="/consent/preview/:templateId" element={<ProtectedRoute><ConsentPreview /></ProtectedRoute>} />
           <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />

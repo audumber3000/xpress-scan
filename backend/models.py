@@ -936,6 +936,14 @@ class Invoice(Base):
     finalized_at = Column(DateTime, nullable=True)
     paid_amount = Column(Float, default=0.0)
     due_amount = Column(Float, default=0.0)
+    # The credential behind the QR code printed on the bill. Random and stored,
+    # not derived from the app secret, because a printed invoice outlives any
+    # secret: a signed token dies the day JWT_SECRET is rotated — which a host
+    # migration does — and every QR code on every bill in every drawer stops
+    # working at once. A stored one survives that, and can be replaced for one
+    # invoice if a patient loses the paper. Null until the clinic turns the QR
+    # on and the invoice is first rendered; see domains/finance/invoice_link.py.
+    public_token = Column(String(32), nullable=True, unique=True, index=True)
     
     # Relationships
     clinic = relationship("Clinic")
