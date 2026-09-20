@@ -247,15 +247,19 @@ const MedicationGroupsTab = () => {
       {groups.length === 0 ? (
         <div className="border border-dashed border-gray-300 rounded-xl py-12 px-6 text-center">
           <Layers size={26} className="mx-auto text-gray-300 mb-2" />
-          <p className="text-sm font-semibold text-gray-700">No sets yet</p>
+          {/* Every clinic now starts with the common sets already in this list,
+              so this only appears once someone has deleted all of them. The
+              button is the way back, and it is a deliberate one: it never runs
+              on its own. */}
+          <p className="text-sm font-semibold text-gray-700">No sets</p>
           <p className="text-xs text-gray-500 mt-1 mb-4 max-w-md mx-auto">
-            Start from the common ones and edit them to match your practice, or build
-            your own from scratch.
+            Bring back the common sets for extractions, root canals, cleanings and
+            the rest, or build your own from scratch.
           </p>
           <button onClick={installStarters} disabled={saving}
                   className="inline-flex items-center gap-1.5 px-4 h-10 rounded-lg border border-[#29828a] text-[#29828a] text-sm font-bold hover:bg-[#29828a]/5 disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            Add the common sets
+            Add the common sets back
           </button>
         </div>
       ) : (

@@ -346,6 +346,10 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS consent_defaults_seeded BOOLEAN DEFAULT FALSE"
             ))
+            # Default prescription sets, seeded once per clinic like the above.
+            conn.execute(text(
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS medication_groups_seeded BOOLEAN DEFAULT FALSE"
+            ))
             # The token behind the link-to-invoice QR code. Unique, because it
             # is the only thing the public endpoint looks an invoice up by.
             # Postgres allows many NULLs under a unique index, which is what

@@ -66,6 +66,8 @@ class Clinic(Base):
     # after that. Without the flag, deleting a form you do not use would
     # bring it straight back on the next page load.
     consent_defaults_seeded = Column(Boolean, default=False)
+    # And the same again for the default prescription sets.
+    medication_groups_seeded = Column(Boolean, default=False)
     email = Column(String)
     gst_number = Column(String)
     specialization = Column(String, default='dental')  # dental, cardiology, pathology, etc.

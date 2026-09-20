@@ -28,6 +28,10 @@ from core.auth_utils import get_current_user
 from database import get_db
 from models import (MedicationGroup, MedicationGroupItem, MedicationStock,
                     TreatmentType, User)
+from domains.inventory.starter_medication_sets import STARTER_SETS
+from domains.inventory.seed_medication_groups import (
+    add_missing_sets, seed_clinic_medication_groups,
+)
 
 router = APIRouter(prefix="/medication-groups", tags=["medication-groups"])
 
@@ -87,6 +91,11 @@ def list_groups(
     would hide the general painkiller set the moment a treatment was chosen,
     which is exactly when it is most likely wanted.
     """
+    # Defaults land here, lazily and once per clinic. This endpoint is also
+    # what the prescription drawer calls, so they are in place the first time
+    # a doctor writes a prescription, not only once someone visits settings.
+    seed_clinic_medication_groups(db, current_user.clinic_id)
+
     groups = (
         db.query(MedicationGroup)
         .filter(MedicationGroup.clinic_id == current_user.clinic_id,
@@ -193,69 +202,9 @@ def _replace_items(db: Session, group: MedicationGroup, items: List[GroupItemIn]
 
 # ── Starter sets ─────────────────────────────────────────────────────────────
 #
-# Same reasoning as the consent starter library: a clinic that opens this to an
-# empty list and a "New set" button is being asked to do the work before seeing
-# the benefit, so most will not, and the feature stays unused. These are the
-# combinations a general dental practice writes most often.
-#
-# Doses are the common adult ones and are explicitly a starting point: the
-# endpoint says so, and every line stays editable.
-STARTER_SETS = [
-    {
-        "name": "After extraction",
-        "description": "Routine cover after a simple extraction",
-        "items": [
-            {"medicine_name": "Amoxicillin 500mg", "dosage": "1-0-1", "duration": "5 days",
-             "quantity": "10", "notes": "After meals"},
-            {"medicine_name": "Paracetamol 650mg", "dosage": "1-1-1", "duration": "3 days",
-             "quantity": "9", "notes": "For pain, after food"},
-            {"medicine_name": "Chlorhexidine Mouthwash", "dosage": "0-1-0", "duration": "7 days",
-             "quantity": "1", "notes": "Rinse 30 seconds, do not swallow. Start the day after."},
-        ],
-    },
-    {
-        "name": "Root canal, between visits",
-        "description": "Pain relief and cover while the canal is open",
-        "items": [
-            {"medicine_name": "Amoxicillin 500mg", "dosage": "1-0-1", "duration": "5 days",
-             "quantity": "10", "notes": "After meals"},
-            {"medicine_name": "Ibuprofen 400mg", "dosage": "1-0-1", "duration": "3 days",
-             "quantity": "6", "notes": "After food. Stop if there is stomach discomfort."},
-            {"medicine_name": "Pantoprazole 40mg", "dosage": "1-0-0", "duration": "3 days",
-             "quantity": "3", "notes": "Before breakfast, protects the stomach"},
-        ],
-    },
-    {
-        "name": "Pain only, no antibiotic",
-        "description": "When there is no sign of infection",
-        "items": [
-            {"medicine_name": "Paracetamol 650mg", "dosage": "1-1-1", "duration": "3 days",
-             "quantity": "9", "notes": "After food"},
-        ],
-    },
-    {
-        "name": "Gum infection",
-        "description": "Localised periodontal infection",
-        "items": [
-            {"medicine_name": "Amoxicillin 500mg", "dosage": "1-0-1", "duration": "5 days",
-             "quantity": "10", "notes": "After meals"},
-            {"medicine_name": "Metronidazole 400mg", "dosage": "1-1-1", "duration": "5 days",
-             "quantity": "15", "notes": "After food. No alcohol while taking this."},
-            {"medicine_name": "Chlorhexidine Mouthwash", "dosage": "0-1-0", "duration": "10 days",
-             "quantity": "1", "notes": "Rinse 30 seconds"},
-        ],
-    },
-    {
-        "name": "Ulcers and soreness",
-        "description": "Local relief for mouth ulcers",
-        "items": [
-            {"medicine_name": "Candid Mouth Paint", "dosage": "SOS", "duration": "5 days",
-             "quantity": "1", "notes": "Apply locally three times a day"},
-            {"medicine_name": "Paracetamol 650mg", "dosage": "1-0-1", "duration": "3 days",
-             "quantity": "6", "notes": "If painful"},
-        ],
-    },
-]
+# The list lives in domains/inventory/starter_medication_sets.py and is seeded
+# into each clinic on first use. What remains here is the empty-state button:
+# a clinic that deleted every set can bring the defaults back on purpose.
 
 
 @router.get("/starter-sets")
@@ -278,28 +227,6 @@ def install_starters(
     Matched on name so pressing it twice does not produce five duplicates, and
     a clinic that has renamed or edited one keeps their version.
     """
-    existing = {
-        (g.name or "").strip().lower()
-        for g in db.query(MedicationGroup).filter(
-            MedicationGroup.clinic_id == current_user.clinic_id
-        ).all()
-    }
-
-    created = []
-    for spec in STARTER_SETS:
-        if spec["name"].strip().lower() in existing:
-            continue
-        group = MedicationGroup(
-            clinic_id=current_user.clinic_id,
-            name=spec["name"],
-            description=spec["description"],
-            audience="adult",
-            created_by=current_user.id,
-        )
-        db.add(group)
-        db.flush()
-        _replace_items(db, group, [GroupItemIn(**i) for i in spec["items"]])
-        created.append(spec["name"])
-
+    created = add_missing_sets(db, current_user.clinic_id, created_by=current_user.id)
     db.commit()
     return {"created": created, "skipped": len(STARTER_SETS) - len(created)}
