@@ -1,3 +1,4 @@
+import traceback
 from fastapi import APIRouter, HTTPException, Request, Depends
 from sqlalchemy.orm import Session
 from database import get_db
@@ -283,7 +284,13 @@ async def mobile_oauth_login(request: Request, db: Session = Depends(get_db)):
     if not id_token:
         raise HTTPException(status_code=400, detail="Missing id_token")
 
-    from services.firebase_auth import verify_firebase_token
+    # domains.infrastructure.services, not services: c849f642 (the Jan 2026
+    # reorg) moved this module and left the old path behind here. There is no
+    # top-level `services` package, so every call raised ModuleNotFoundError
+    # before reaching the try below, and /auth/oauth answered 500 to every
+    # Google sign-in, web and mobile alike. init_local_db.py imports the same
+    # function from the correct path, which is why nothing else noticed.
+    from domains.infrastructure.services.firebase_auth import verify_firebase_token
 
     try:
         # Verify Firebase token
@@ -379,6 +386,17 @@ async def mobile_oauth_login(request: Request, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
+        # Log the stack before collapsing it into a 500.
+        #
+        # This handler used to convert any exception straight into
+        # HTTPException(500, f"OAuth error: {e}") and drop the traceback on the
+        # floor. The frontend then discarded that string too, by design — see
+        # the note in utils/api.js about 5xx text describing our bug rather
+        # than the user's situation. So a broken Google sign-in produced a
+        # generic apology on screen, one bare "500" line in the log, and no
+        # way to tell what actually failed. The sibling /refresh handler below
+        # already says it: whatever broke belongs in the logs.
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"OAuth error: {str(e)}")
 
 @router.post("/refresh")
