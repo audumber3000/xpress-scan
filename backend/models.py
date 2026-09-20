@@ -61,6 +61,11 @@ class Clinic(Base):
     # True once the default medication catalogue has been copied into this clinic
     # (so they're clinic-owned and deletable). Prevents re-seeding after deletion.
     default_medications_seeded = Column(Boolean, default=False)
+    # Same one-time-seeding guard as the medications above: the default
+    # consent forms are copied in on first use and are ordinary clinic rows
+    # after that. Without the flag, deleting a form you do not use would
+    # bring it straight back on the next page load.
+    consent_defaults_seeded = Column(Boolean, default=False)
     email = Column(String)
     gst_number = Column(String)
     specialization = Column(String, default='dental')  # dental, cardiology, pathology, etc.

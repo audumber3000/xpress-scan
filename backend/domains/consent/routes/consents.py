@@ -14,7 +14,7 @@ from core.dtos import (
     PatientConsentResponseDTO
 )
 from core.auth_utils import get_current_user
-from domains.consent.starter_templates import CATEGORIES, STARTER_TEMPLATES
+from domains.consent.seed_consents import seed_clinic_consents
 
 router = APIRouter()
 
@@ -26,6 +26,16 @@ async def list_templates(
     clinic_id: Optional[int] = None
 ):
     target_clinic_id = clinic_id or current_user.clinic_id
+
+    # The default forms land here rather than behind a "ready-made forms"
+    # button. That button asked a dentist to go and find wording before the
+    # section did anything, and a section that opens empty stays empty — which
+    # meant consent went unrecorded. Now the list is never empty on a first
+    # visit, and every row in it is an ordinary clinic row: editable, and
+    # deletable for good. Lazy and once per clinic, so it reaches clinics that
+    # already exist and never resurrects one that was deleted.
+    seed_clinic_consents(db, target_clinic_id)
+
     templates = db.query(ConsentTemplate).filter(
         ConsentTemplate.clinic_id == target_clinic_id
     ).all()
@@ -44,58 +54,10 @@ async def list_templates(
     return templates
 
 
-@router.get("/starter-library")
-async def starter_library(current_user = Depends(get_current_user)):
-    """Ready-made consent wording a clinic can adopt and edit.
-
-    Declared above /templates/{id}/... routes is unnecessary here (different
-    path root) but the ordering rule still applies to anything under
-    /templates: a literal must precede a parameter route.
-    """
-    return {
-        "categories": CATEGORIES,
-        "templates": [
-            {"name": t["name"], "category": t["category"],
-             "preview": t["content"][:180], "content": t["content"]}
-            for t in STARTER_TEMPLATES
-        ],
-    }
-
-
-@router.post("/templates/adopt")
-async def adopt_starter_templates(
-    payload: dict,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
-):
-    """Copy chosen starter templates into this clinic.
-
-    Copied, not referenced: the clinic owns the wording from that moment and
-    editing it must never change anyone else's, nor should a later change here
-    silently alter a form a clinic has already reviewed.
-    """
-    wanted = set(payload.get("names") or [])
-    chosen = [t for t in STARTER_TEMPLATES if not wanted or t["name"] in wanted]
-
-    existing = {
-        n for (n,) in db.query(ConsentTemplate.name).filter(
-            ConsentTemplate.clinic_id == current_user.clinic_id
-        ).all()
-    }
-
-    created = []
-    for t in chosen:
-        if t["name"] in existing:
-            continue  # idempotent: adopting twice must not duplicate
-        row = ConsentTemplate(
-            clinic_id=current_user.clinic_id,
-            name=t["name"], content=t["content"], category=t["category"],
-            is_active=True,
-        )
-        db.add(row)
-        created.append(t["name"])
-    db.commit()
-    return {"created": created, "skipped": sorted(existing & {t["name"] for t in chosen})}
+# /starter-library and /templates/adopt lived here. They backed the
+# "Ready-made forms" picker, which is gone: the defaults are seeded into the
+# list instead, so there is nothing left to browse and adopt. The wording
+# itself still lives in starter_templates.py, which seed_consents reads.
 
 
 @router.get("/signed")

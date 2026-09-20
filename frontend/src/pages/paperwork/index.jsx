@@ -6,11 +6,10 @@ import { useAuth } from "../../contexts/AuthContext";
 import { notify } from '../../utils/notify';
 import Card from "../../components/Card";
 import axios from "axios";
-import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download, FileCheck, BookOpen, HeartPulse } from 'lucide-react';
+import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download, FileCheck, HeartPulse } from 'lucide-react';
 import ConsentRecentLinks from "../../components/consents/ConsentRecentLinks";
 import Pagination from "../../components/Pagination";
 import FilterDropdown from "../../components/FilterDropdown";
-import StarterLibrary from '../../components/consents/StarterLibrary';
 import SignedConsents from '../../components/consents/SignedConsents';
 import MedicalFormTab from './MedicalFormTab';
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
@@ -36,7 +35,6 @@ const Paperwork = () => {
     const [templates, setTemplates] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('templates');
-    const [showLibrary, setShowLibrary] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [formData, setFormData] = useState({
@@ -304,15 +302,6 @@ const Paperwork = () => {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                 </svg>
                                 Export
-                            </button>
-                        )}
-                        {activeTab === 'templates' && (
-                            <button
-                                onClick={() => setShowLibrary(true)}
-                                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:border-[#2a276e] hover:text-[#2a276e] flex items-center gap-2 transition-colors"
-                            >
-                                <BookOpen className="w-4 h-4" />
-                                Ready-made forms
                             </button>
                         )}
                         {activeTab !== 'links' && activeTab !== 'signed' && (
@@ -766,12 +755,6 @@ const Paperwork = () => {
 
             {/* Template Add/Edit Drawer */}
             <div className={`fixed inset-0 z-50 flex justify-end ${showModal ? 'visible' : 'invisible'}`}>
-                <StarterLibrary
-                open={showLibrary}
-                onClose={() => setShowLibrary(false)}
-                onAdopted={fetchTemplates}
-            />
-
             <div
                     className={`fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${showModal ? 'opacity-100' : 'opacity-0'}`}
                     onClick={() => setShowModal(false)}

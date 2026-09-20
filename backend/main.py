@@ -341,6 +341,11 @@ async def lifespan(app: FastAPI):
             conn.execute(text(
                 "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS default_medications_seeded BOOLEAN DEFAULT FALSE"
             ))
+            # Default consent forms, seeded per-clinic on first fetch for the
+            # same reasons and with the same one-shot guard.
+            conn.execute(text(
+                "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS consent_defaults_seeded BOOLEAN DEFAULT FALSE"
+            ))
 
             # ── Added 2026-08-13 ────────────────────────────────────────────
             # Master password, geofenced attendance, device location, staff pay.
