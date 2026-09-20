@@ -33,6 +33,20 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - WAREACH_WEBHOOK_SECRET=${WAREACH_WEBHOOK_SECRET}
+      # The CRM reads and acts through /integration/v1 with these. Without them
+      # the Integration API refuses every request with
+      # `integration_not_configured` and every CRM screen goes blank — which is
+      # exactly what happened on 2026-09-19, when this file was copied to the
+      # EC2 host over a version that had them added by hand. Env vars added on
+      # the server and not here are a production outage waiting for the next
+      # deploy; they belong in the file the deploy uses.
+      - INTEGRATION_TOKENS=${INTEGRATION_TOKENS}
+      - INTEGRATION_READONLY_TOKENS=${INTEGRATION_READONLY_TOKENS}
+      # Platform WhatsApp outreach (ClinoHealth -> the clinic owner, our own
+      # number), as distinct from a clinic's own sends above.
+      - PLATFORM_WA_URL=${PLATFORM_WA_URL}
+      - PLATFORM_WA_KEY=${PLATFORM_WA_KEY}
+      - PLATFORM_WA_AGENT=${PLATFORM_WA_AGENT}
       # Own-number WhatsApp (WA Reach partner API). Blank URL/key = feature off, MSG91 only.
       - WAREACH_URL=${WAREACH_URL:-}
       - WAREACH_PARTNER_KEY=${WAREACH_PARTNER_KEY:-}
