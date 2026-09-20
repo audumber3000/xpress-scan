@@ -6,18 +6,32 @@ import { useBreakpoint } from '../utils/useBreakpoint';
 import { useDashboardData } from './dashboard/useDashboardData';
 import DashboardHeader from './dashboard/DashboardHeader';
 import QuickActions from './dashboard/QuickActions';
+import AmbientStrip from './dashboard/AmbientStrip';
 import MetricCard from '../components/common/MetricCard';
 import TodayPanel from './dashboard/TodayPanel';
-import PatientStatsChart from './dashboard/charts/PatientStatsChart';
-import DemographicsChart from './dashboard/charts/DemographicsChart';
 import RevenueChart from './dashboard/charts/RevenueChart';
-import AppointmentTrendsChart from './dashboard/charts/AppointmentTrendsChart';
+import TreatmentRevenueChart from './dashboard/charts/TreatmentRevenueChart';
+import ChairLoadChart from './dashboard/charts/ChairLoadChart';
+import ReceivablesAgeChart from './dashboard/charts/ReceivablesAgeChart';
 // The same drawer Payments, Lab and Vendors use. The dashboard had its own,
 // which queried the legacy `payments` table (0 rows) for Revenue and
 // Outstanding, so those two opened empty while the card above read three lakh.
 import KpiDetailDrawer from '../components/common/KpiDetailDrawer';
 import AssistantPanel from './dashboard/AssistantPanel';
 import SupportMenu from './dashboard/SupportMenu';
+
+/**
+ * A quiet band label, so the page reads as three sections rather than six
+ * stacked cards: what the numbers are, what today looks like, and the shape
+ * behind both.
+ */
+const SectionLabel = ({ children, note }) => (
+  <div className="flex items-baseline gap-2.5 mb-2.5 mt-1">
+    <h2 className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{children}</h2>
+    {note && <span className="text-[11px] text-gray-400 font-medium truncate">{note}</span>}
+    <span className="flex-1 h-px bg-gray-200 min-w-4" />
+  </div>
+);
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -27,9 +41,10 @@ const Dashboard = () => {
   const {
     globalPeriod, setGlobalPeriod,
     metrics,
-    patientStatsData, demographicsData, revenueData, appointmentData,
-    loading, visibleWidgets,
-    selectedMetric, openMetric, closeMetric,
+    revenueData, treatmentData, chairLoadData, receivablesData,
+    loading, refreshing, visibleWidgets,
+    selectedMetric, openMetric, openMetricByKey, closeMetric,
+    ambient,
     today, todayLoading,
   } = useDashboardData();
 
@@ -47,11 +62,13 @@ const Dashboard = () => {
     }
   }, []);
 
-  // Reuse the KPI deltas as period-over-period captions on the matching charts.
-  const deltaFor = (key) => {
-    const m = metrics.find((x) => x.key === key);
-    return m ? { change: m.change, changeType: m.changeType } : null;
-  };
+  // Reuse the revenue KPI's period-over-period figures as the caption on the
+  // chart that plots the same money. `previous` rides along so the caption can
+  // drop the percentage when the base is too small to carry one.
+  const revenueDelta = (() => {
+    const m = metrics.find((x) => x.key === 'revenue');
+    return m ? { change: m.change, changeType: m.changeType, previous: m.previous, value: m.value, isMoney: true } : null;
+  })();
 
   return (
     <div className="w-full h-full min-h-screen bg-gray-50 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
@@ -61,7 +78,17 @@ const Dashboard = () => {
         onPeriodChange={setGlobalPeriod}
       />
 
-      <QuickActions />
+      {/* The quick actions and the ambient strip share a row: the actions are
+          what you came to do, the strip is what kind of day it is. They sit at
+          opposite ends of it, which is also what stops the right half of the
+          header reading as an empty shelf.
+
+          The strip drops below the actions on a phone rather than competing
+          with them for a 390px line. */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 md:mb-5">
+        <QuickActions />
+        <AmbientStrip data={ambient} />
+      </div>
 
       {/*
         KPI row.
@@ -98,30 +125,39 @@ const Dashboard = () => {
       {/* Calendar + today's schedule + the attention strip */}
       <TodayPanel data={today} loading={todayLoading} />
 
+      <SectionLabel note="Two of these ignore the date filter and say so">Trends</SectionLabel>
+
       {/*
         Charts.
           phone   one per row
           tablet  one per row, full width — 768px splits into two 360px columns,
-                  which is under the width a bar chart or a donut-plus-legend
+                  which is under the width a column chart or a weekday grid
                   needs, and pairing them left half-empty rows besides
-          >=lg    2/3 + 1/3, a wide chart beside a narrow one
+          >=lg    2/3 + 1/3
+
+        Which chart gets which column is decided by its form, not by whichever
+        slot was free. Money-in and the chair grid are time across the x-axis
+        and want width; the two ranked lists read fine narrow and would only
+        stretch their bars if given more.
       */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-3 md:mb-4">
-        {visibleWidgets.patientStats && (
+        {visibleWidgets.cashflow && (
           <div className="md:col-span-2">
-            <PatientStatsChart
-              data={patientStatsData}
-              loading={loading.patientStats}
-              delta={deltaFor('patients')}
+            <RevenueChart
+              data={revenueData}
+              loading={loading.revenue}
+              refreshing={refreshing.revenue}
+              delta={revenueDelta}
               breakpoint={breakpoint}
             />
           </div>
         )}
-        {visibleWidgets.demographics && (
+        {visibleWidgets.treatmentRevenue && (
           <div className="md:col-span-2 lg:col-span-1">
-            <DemographicsChart
-              data={demographicsData}
-              loading={loading.demographics}
+            <TreatmentRevenueChart
+              data={treatmentData}
+              loading={loading.treatments}
+              refreshing={refreshing.treatments}
               breakpoint={breakpoint}
             />
           </div>
@@ -129,23 +165,24 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-4">
-        {visibleWidgets.revenue && (
+        {visibleWidgets.chairLoad && (
           <div className="md:col-span-2">
-            <RevenueChart
-              data={revenueData}
-              loading={loading.revenue}
-              delta={deltaFor('revenue')}
+            <ChairLoadChart
+              data={chairLoadData}
+              loading={loading.chairLoad}
+              refreshing={refreshing.chairLoad}
               breakpoint={breakpoint}
             />
           </div>
         )}
-        {visibleWidgets.appointments && (
+        {visibleWidgets.receivables && (
           <div className="md:col-span-2 lg:col-span-1">
-            <AppointmentTrendsChart
-              data={appointmentData}
-              loading={loading.appointments}
-              delta={deltaFor('appointments')}
+            <ReceivablesAgeChart
+              data={receivablesData}
+              loading={loading.receivables}
+              refreshing={refreshing.receivables}
               breakpoint={breakpoint}
+              onOpenDetail={() => openMetricByKey('outstanding')}
             />
           </div>
         )}

@@ -1,5 +1,7 @@
 import React from 'react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 import KpiSparkline from './KpiSparkline';
+import { describeDelta } from '../../utils/delta';
 
 /**
  * A KPI card that says what its number means.
@@ -35,23 +37,36 @@ const deltaTone = (changeType, invert) => {
   return good ? 'good' : 'bad';
 };
 
-const DeltaPill = ({ change, changeType, invert, hero, label }) => {
+const DeltaPill = ({ change, changeType, previous, value, isMoney, invert, hero, label }) => {
   // No comparison available is different from a comparison that came out flat.
   // Payments' summary has no period-over-period figure, so rendering "— 0%" on
   // every card there would be four pills asserting something nobody measured.
-  if (change === undefined || change === null) return null;
+  //
+  // describeDelta also decides whether a percentage is honest at this size. A
+  // clinic going from one patient to nine used to render "▲ 800%", which is
+  // true, useless, and the loudest possible signal that a screen is showing
+  // seeded data. Cards that pass `previous` get "+8" instead; cards that don't
+  // (Payments, Expenses) behave exactly as they did.
+  const d = describeDelta({ change, changeType, previous, value, isMoney });
+  if (!d) return null;
 
-  const flat = Math.abs(Number(change)) === 0;
-  const tone = deltaTone(changeType, invert);
+  const flat = d.tone === 'flat';
+  // ▲ and ▼ were text glyphs sitting beside lucide icons everywhere else on
+  // the page: a different baseline, a different weight, and whatever the
+  // system font felt like on the day.
+  const Icon = d.up ? ArrowUp : ArrowDown;
+  const arrow = flat ? null : <Icon size={11} strokeWidth={2.75} aria-hidden="true" />;
+  const body = <>{arrow}{flat ? 'no change' : d.text}</>;
 
   if (hero) {
     return (
-      <span title={label} className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white whitespace-nowrap">
-        {flat ? '— 0%' : `${changeType === 'up' ? '▲' : '▼'} ${Math.abs(change)}%`}
+      <span title={label} className="inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white whitespace-nowrap">
+        {body}
       </span>
     );
   }
 
+  const tone = deltaTone(changeType, invert);
   const cls = flat
     ? 'bg-gray-100 text-gray-500'
     : tone === 'good'
@@ -59,8 +74,8 @@ const DeltaPill = ({ change, changeType, invert, hero, label }) => {
       : 'bg-red-50 text-red-600';
 
   return (
-    <span title={label} className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>
-      {flat ? '— 0%' : `${changeType === 'up' ? '▲' : '▼'} ${Math.abs(change)}%`}
+    <span title={label} className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${cls}`}>
+      {body}
     </span>
   );
 };
@@ -110,6 +125,15 @@ const MetricCard = ({
   display,          // pre-formatted headline string
   change,
   changeType,
+  // The value the percentage was measured against, and the current value.
+  // Optional: with both, the pill can drop a percentage that is too small a
+  // base to mean anything. See describeDelta.
+  previous,
+  value,
+  // Whether `value` is money, so a small-base delta comes out as "+₹1.2k"
+  // rather than a bare "+1200". KpiDetailDrawer already reads this off the
+  // same card object, so the name is shared rather than invented here.
+  isMoney,
   // What the pill compared, in words. Payments measures its arrows over a
   // month while the headline covers everything the filters select, so the two
   // windows differ and the pill has to be able to say so.
@@ -177,12 +201,17 @@ const MetricCard = ({
         >
           {display}
         </span>
-        <DeltaPill change={change} changeType={changeType} invert={invert} hero={hero} label={changeLabel} />
+        <DeltaPill change={change} changeType={changeType} previous={previous} value={value} isMoney={isMoney} invert={invert} hero={hero} label={changeLabel} />
         {badge && <Badge text={badge} tone={badgeTone} />}
       </div>
 
+      {/* mt-auto, so the bars sit on the floor of the card rather than
+          floating in the middle of it. The KPI row stretches every card to the
+          tallest one (the hero, which carries a meter), and without this the
+          sparkline stopped halfway down and left the bottom third of the
+          Patients card empty. The meter below already does the same thing. */}
       {variant === 'spark' && sparkline?.length > 0 && (
-        <KpiSparkline data={sparkline} highlight={sparklineHighlight} className="relative" />
+        <KpiSparkline data={sparkline} highlight={sparklineHighlight} className="relative mt-auto" />
       )}
 
       {variant === 'breakdown' && rows?.length > 0 && <Breakdown rows={rows} />}

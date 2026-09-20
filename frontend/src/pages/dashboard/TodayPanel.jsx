@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wallet, FlaskConical, UserX, CalendarClock, Package, CheckCircle2, ChevronRight, Stethoscope } from 'lucide-react';
 import { SkeletonBox } from '../../components/Skeleton';
@@ -14,21 +14,49 @@ import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avat
  * These also had to be updated: the map still keyed on 'checking' and
  * 'accepted', which stopped existing when the statuses were renamed, so most
  * rows fell through to the grey default and every state looked the same.
+ *
+ * ─── Three weights, not seven fills ──────────────────────────────────────
+ *
+ * Every status used to carry its own tinted pill — grey, lavender, green,
+ * emerald, amber, struck-through grey — and the interleaved list added a navy
+ * "In chair" and an emerald "Registered" on top of that. Eight fills in one
+ * narrow column, which is past the point where colour classes stop separating
+ * and start blurring, and it made the column impossible to skim: everything
+ * was shouting equally.
+ *
+ * There are only three things this column has to say, so there are three
+ * weights:
+ *
+ *   NOW    solid fill      somebody is in the building and you should look up
+ *   AHEAD  light tint      still to come
+ *   DONE   muted ink only  finished, and out of the way
+ *
+ * A no-show is DONE by weight — the visit is over — but keeps amber ink,
+ * because it is the one finished state that still owes you an action. That is
+ * one ink colour, not a fourth fill.
  */
+const WEIGHT = {
+  now:    'bg-[#4b45b5] text-white',
+  ahead:  'bg-[#efeefb] text-[#4b45b5]',
+  done:   'text-gray-400',
+  missed: 'text-amber-700',
+};
+
 const STATUS_STYLES = {
-  scheduled: { label: 'Booked',   cls: 'bg-gray-100 text-gray-600' },
-  confirmed: { label: 'Confirmed', cls: 'bg-[#f0f0fd] text-[#2a276e]' },
-  arrived:   { label: 'Here now',  cls: 'bg-green-50 text-green-700 ring-1 ring-green-200' },
-  completed: { label: 'Seen',      cls: 'bg-emerald-50 text-emerald-700' },
-  no_show:   { label: 'No show',   cls: 'bg-amber-50 text-amber-700' },
-  'no-show': { label: 'No show',   cls: 'bg-amber-50 text-amber-700' },
-  cancelled: { label: 'Cancelled', cls: 'bg-gray-100 text-gray-400 line-through' },
+  scheduled:  { label: 'Booked',    weight: 'ahead' },
+  confirmed:  { label: 'Confirmed', weight: 'ahead' },
+  arrived:    { label: 'Here now',  weight: 'now' },
+  completed:  { label: 'Seen',      weight: 'done' },
+  no_show:    { label: 'No show',   weight: 'missed' },
+  'no-show':  { label: 'No show',   weight: 'missed' },
+  cancelled:  { label: 'Cancelled', weight: 'done' },
 };
 
 const StatusBadge = ({ status }) => {
-  const s = STATUS_STYLES[status] || { label: String(status || '').replace('_', ' '), cls: 'bg-gray-100 text-gray-600' };
+  const s = STATUS_STYLES[status]
+    || { label: String(status || '').replace('_', ' '), weight: 'ahead' };
   return (
-    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap ${s.cls}`}>
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap ${WEIGHT[s.weight]}`}>
       {s.label}
     </span>
   );
@@ -215,7 +243,7 @@ const AppointmentRow = ({ a, isNext, onOpen }) => {
       {/* Started beats booked: once a visit is open, that is
           the more useful thing to know. */}
       {a.visit_started && !done ? (
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#2a276e] text-white flex-shrink-0 inline-flex items-center gap-1 whitespace-nowrap">
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 inline-flex items-center gap-1 whitespace-nowrap ${WEIGHT.now}`}>
           <Stethoscope size={10} /> In chair
         </span>
       ) : (
@@ -293,8 +321,12 @@ const RegistrationRow = ({ pt, activeDate, onOpen }) => {
 
       {/* The kind pill. It sits in the same slot an appointment's status badge
           uses, so the interleaved list has exactly one pill per row and you can
-          read the column straight down: Booked, Registered, Seen, Registered. */}
-      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 flex-shrink-0 whitespace-nowrap">
+          read the column straight down: Booked, Registered, Seen, Registered.
+
+          DONE weight: a registration is a thing that has already happened, and
+          it was the loudest pill in the column while being the one that never
+          asks for anything. */}
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap ${WEIGHT.done}`}>
         Registered
       </span>
 
@@ -302,6 +334,22 @@ const RegistrationRow = ({ pt, activeDate, onOpen }) => {
     </button>
   );
 };
+
+/**
+ * Where the clock is, in a list of times.
+ *
+ * A hairline and one word. It is not a row and must never look like one, so it
+ * carries no avatar gutter, no pill and no hover state — the eye should land
+ * on it once, take the position, and move on.
+ */
+const NowLine = ({ innerRef }) => (
+  <div ref={innerRef} className="flex items-center gap-2 py-1.5" aria-label="Current time">
+    <span className="text-[9px] font-bold uppercase tracking-wider text-[#4b45b5] flex-shrink-0">
+      Now
+    </span>
+    <span className="flex-1 h-px bg-[#4b45b5]/25" />
+  </div>
+);
 
 const TodayPanel = ({ data, loading }) => {
   const [selectedDate, setSelectedDate] = useState(null);
@@ -428,6 +476,52 @@ const TodayPanel = ({ data, loading }) => {
     return (upcoming || open[0])?.id ?? null;
   }, [dayAppointments, showingToday]);
 
+  // Where "now" falls in the day's list.
+  //
+  // A day list with no time marker makes the reader work out where they are by
+  // reading times and comparing them to the clock, every time they glance at
+  // it. One hairline removes that. Only today gets one: on the 3rd of last
+  // month there is no "now" in the list, and drawing one would be a small lie
+  // of the same kind the NEXT badge avoids above.
+  //
+  // The index is the first row that has not happened yet — which is also the
+  // first untimed row, since those sort to the bottom — so a fully finished
+  // day puts the line at the end rather than not at all.
+  const nowIndex = useMemo(() => {
+    if (!showingToday || dayRows.length === 0) return -1;
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const idx = dayRows.findIndex((r) => r.at === null || r.at >= mins);
+    return idx === -1 ? dayRows.length : idx;
+  }, [dayRows, showingToday]);
+
+  const scrollerRef = useRef(null);
+  const nowRef = useRef(null);
+  const [atBottom, setAtBottom] = useState(true);
+
+  // Open on the part of the day that is still ahead. A busy clinic's morning
+  // is above the fold by 4pm otherwise, and the rows you can still do anything
+  // about are the ones off-screen.
+  //
+  // scrollTop rather than scrollIntoView: the latter walks up to the nearest
+  // scrollable ancestor, which here is the whole dashboard, so it would yank
+  // the page down past the KPI row on load.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const marker = nowRef.current;
+    if (!scroller || !marker) return;
+    scroller.scrollTop = Math.max(0, marker.offsetTop - scroller.clientHeight / 2);
+  }, [nowIndex, activeDate]);
+
+  const onScroll = useCallback((e) => {
+    const el = e.currentTarget;
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 8);
+  }, []);
+
+  // Reset when the day changes: a short day has nothing below the fold, and a
+  // stale `false` would leave a fade hanging under a list that already ended.
+  useEffect(() => { setAtBottom(true); }, [activeDate]);
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-3.5 md:p-5 mb-4 md:mb-5">
       {loading ? (
@@ -448,12 +542,31 @@ const TodayPanel = ({ data, loading }) => {
             />
 
             <div className="min-w-0 flex flex-col">
-              <div className="flex items-baseline justify-between gap-2 mb-2.5">
-                <h4 className="text-sm font-bold text-gray-800 tracking-tight">{heading}</h4>
+              {/* The day's progress as a rail rather than a sentence.
+                  "12 booked · 5 done · 7 left" made the reader do the division
+                  to find out how far through the day the clinic is, which is
+                  the only thing that line was for. The numbers stay; the bar
+                  answers first. */}
+              <div className="mb-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h4 className="text-sm font-bold text-gray-800 tracking-tight">{heading}</h4>
+                  {daySummary?.total > 0 && (
+                    <span className="text-[11px] text-gray-400 font-medium tabular-nums whitespace-nowrap">
+                      {daySummary.completed} of {daySummary.total} done
+                    </span>
+                  )}
+                </div>
                 {daySummary?.total > 0 && (
-                  <span className="text-[11px] text-gray-400 font-medium tabular-nums whitespace-nowrap">
-                    {daySummary.total} booked · {daySummary.completed} done · {daySummary.remaining} left
-                  </span>
+                  <div
+                    className="h-1 rounded-full bg-gray-100 overflow-hidden mt-1.5"
+                    role="img"
+                    aria-label={`${daySummary.completed} of ${daySummary.total} appointments done, ${daySummary.remaining} left`}
+                  >
+                    <div
+                      className="h-full rounded-full bg-[#4b45b5] transition-[width] duration-500"
+                      style={{ width: `${Math.round((daySummary.completed / daySummary.total) * 100)}%` }}
+                    />
+                  </div>
                 )}
               </div>
 
@@ -485,37 +598,60 @@ const TodayPanel = ({ data, loading }) => {
                 // md:max-h-none with flex-1 doing the work, but the two columns
                 // are grid cells that size to their content, so flex-1 had
                 // nothing to push against and twenty registrations stretched
-                // the card halfway down the page. flex-1 still fills a quiet
-                // day out to the calendar's height; the cap stops a busy one.
-                <div className={`space-y-0 max-h-[15rem] md:max-h-[18rem] md:flex-1 md:min-h-0 overflow-y-auto pr-1 -mr-1 transition-opacity ${
-                  dayLoading ? 'opacity-50' : ''
-                }`}>
-                  {dayRows.map((row) => (
-                    row.kind === 'appointment' ? (
-                      <AppointmentRow
-                        key={row.key}
-                        a={row.data}
-                        isNext={!!nextUpId && row.data.id === nextUpId}
-                        onOpen={() => navigate(`/calendar?appointment=${row.data.id}`)}
-                      />
-                    ) : (
-                      <RegistrationRow
-                        key={row.key}
-                        pt={row.data}
-                        activeDate={activeDate}
-                        onOpen={() => navigate(`/patient-profile/${row.data.id}`)}
-                      />
-                    )
-                  ))}
+                // the card halfway down the page. flex-1 now sits on the
+                // wrapper and the scroller takes its height, which keeps that
+                // fix while giving the fade something to be positioned against.
+                //
+                // The wrapper exists for that fade. A hard clip gave no sign
+                // there was anything below it, and on a busy afternoon the
+                // rows still ahead of you are exactly the ones off-screen.
+                <div className="relative md:flex-1 md:min-h-0">
+                  <div
+                    ref={scrollerRef}
+                    onScroll={onScroll}
+                    className={`space-y-0 max-h-[15rem] md:max-h-[18rem] md:h-full overflow-y-auto pr-1 -mr-1 transition-opacity ${
+                      dayLoading ? 'opacity-50' : ''
+                    }`}
+                  >
+                    {dayRows.map((row, i) => (
+                      <React.Fragment key={row.key}>
+                        {i === nowIndex && <NowLine innerRef={nowRef} />}
+                        {row.kind === 'appointment' ? (
+                          <AppointmentRow
+                            a={row.data}
+                            isNext={!!nextUpId && row.data.id === nextUpId}
+                            onOpen={() => navigate(`/calendar?appointment=${row.data.id}`)}
+                          />
+                        ) : (
+                          <RegistrationRow
+                            pt={row.data}
+                            activeDate={activeDate}
+                            onOpen={() => navigate(`/patient-profile/${row.data.id}`)}
+                          />
+                        )}
+                      </React.Fragment>
+                    ))}
 
-                  {dayPatientsTotal > dayPatients.length && (
-                    <button
-                      onClick={() => navigate('/patients')}
-                      className="w-full text-left py-2 px-1.5 -mx-1.5 rounded-lg text-[11px] font-semibold text-[#2a276e] hover:bg-gray-50 transition-colors cursor-pointer"
-                    >
-                      {dayPatientsTotal - dayPatients.length} more registered this day, open in Patients
-                    </button>
-                  )}
+                    {/* A day where everything has already happened still gets
+                        the line, at the end, rather than silently losing it. */}
+                    {nowIndex === dayRows.length && <NowLine innerRef={nowRef} />}
+
+                    {dayPatientsTotal > dayPatients.length && (
+                      <button
+                        onClick={() => navigate('/patients')}
+                        className="w-full text-left py-2 px-1.5 -mx-1.5 rounded-lg text-[11px] font-semibold text-[#4b45b5] hover:bg-gray-50 transition-colors cursor-pointer"
+                      >
+                        {dayPatientsTotal - dayPatients.length} more registered this day, open in Patients
+                      </button>
+                    )}
+                  </div>
+
+                  <div
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-white to-transparent transition-opacity duration-200 ${
+                      atBottom ? 'opacity-0' : 'opacity-100'
+                    }`}
+                  />
                 </div>
               )}
             </div>

@@ -1,66 +1,121 @@
 import React from 'react';
-import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import ChartCard from '../ChartCard';
 import { formatToK, calculateYAxisDomain, tooltipStyle, formatMoney } from '../format';
 import { getCurrencySymbol } from '../../../utils/currency';
-import { COLORS, GRID_PROPS, AXIS_PROPS, CHART_MARGIN, ChartDefs, geometryFor, trimBuckets } from '../chartTheme';
+import {
+  SERIES, GRID_PROPS, AXIS_PROPS, CHART_MARGIN, BAR_MAX, BAR_RADIUS,
+  stackGap, geometryFor, trimBuckets,
+} from '../chartTheme';
 
-const Icon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const RevenueChart = ({ data, loading, delta, breakpoint }) => {
+/**
+ * What you billed against what actually came in.
+ *
+ * ─── Why this is columns and not the line it was ──────────────────────────
+ *
+ * This chart used to be an Area + Line pair with type="monotone". A monotone
+ * spline through sparse daily data overshoots between points: on a clinic with
+ * billing on Monday and Friday and nothing between, the curve rose to a smooth
+ * crest in the middle of the week and drew several thousand rupees of revenue
+ * on days that had none. Not a styling problem — the chart was asserting money
+ * that did not exist. No interpolation of any kind is safe here, because the
+ * gaps between buckets are real zeroes, not missing samples.
+ *
+ * ─── Why one stacked column instead of two series ─────────────────────────
+ *
+ * The question is "of what I billed, how much came in", which is part-to-whole,
+ * so the two parts belong in one column: the collected portion solid from the
+ * baseline, the shortfall as a pale cap on top. The height of the pale cap IS
+ * the receivable, which is the number the card exists to show, and you read it
+ * without measuring the distance between two lines by eye.
+ *
+ * A bucket can collect more than it billed — a patient settling an old bill —
+ * and then the column is all solid and stands taller than that day's billing.
+ * That is the honest picture, so `owed` floors at zero rather than going
+ * negative and eating the column below it.
+ */
+const RevenueChart = ({ data, loading, refreshing, delta, breakpoint }) => {
   const cur = getCurrencySymbol();
   const geo = geometryFor(breakpoint);
-  const rows = trimBuckets(data, geo.maxBuckets);
 
-  // Name the collection gap in the subtitle — the space between the two series
-  // is the whole point of the chart, and it shouldn't need measuring by eye.
-  const gap = rows.reduce((sum, r) => sum + (Number(r.billed) || 0) - (Number(r.collected) || 0), 0);
+  const rows = trimBuckets(data, geo.maxBuckets).map((r) => {
+    const billed = Number(r.billed) || 0;
+    const collected = Number(r.collected) || 0;
+    return { ...r, billed, collected, owed: Math.max(0, billed - collected) };
+  });
+
+  const totals = rows.reduce(
+    (acc, r) => ({ billed: acc.billed + r.billed, collected: acc.collected + r.collected }),
+    { billed: 0, collected: 0 }
+  );
+  const gap = Math.max(0, totals.billed - totals.collected);
+  const collectedPct = totals.billed > 0 ? Math.round((totals.collected / totals.billed) * 100) : 0;
+
+  const takeaway = totals.billed > 0
+    ? gap > 0
+      ? `You collected ${formatMoney(totals.collected)} of ${formatMoney(totals.billed)} billed, ${collectedPct}%. ${formatMoney(gap)} has not come in yet.`
+      : `Everything billed in this period has been collected, ${formatMoney(totals.collected)}.`
+    : totals.collected > 0
+      ? `${formatMoney(totals.collected)} came in against bills raised earlier.`
+      : null;
 
   return (
     <ChartCard
-      title="Revenue: billed vs collected"
-      description={gap > 0 ? `${formatMoney(gap)} billed but not yet collected` : 'What you invoiced against what came in'}
+      title="Money in"
+      description="What you billed against what reached the clinic"
       loading={loading}
-      isEmpty={rows.length === 0}
+      refreshing={refreshing}
+      isEmpty={rows.length === 0 || (totals.billed === 0 && totals.collected === 0)}
       delta={delta}
-      icon={<Icon />}
       legend={[
-        { label: 'Collected', color: COLORS.primary },
-        { label: 'Billed', color: COLORS.warning },
+        { label: 'Collected', color: SERIES.strong },
+        { label: 'Still owed', color: SERIES.soft, soft: true },
       ]}
-      emptyTitle="No revenue in this period"
-      emptyHint="Invoiced and collected amounts will appear here."
+      takeaway={takeaway}
+      emptyTitle="No money moved in this period"
+      emptyHint="Bills you raise and payments you take will show up here."
+      table={{
+        height: geo.height,
+        columns: [
+          { key: 'label', label: 'Period' },
+          { key: 'billed', label: 'Billed', align: 'right', format: formatMoney },
+          { key: 'collected', label: 'Collected', align: 'right', format: formatMoney },
+          { key: 'owed', label: 'Still owed', align: 'right', format: (v) => (v > 0 ? formatMoney(v) : '—') },
+        ],
+        rows,
+      }}
     >
       <ResponsiveContainer width="100%" height={geo.height}>
-        <ComposedChart data={rows} margin={CHART_MARGIN} accessibilityLayer>
-          <ChartDefs />
+        <BarChart data={rows} margin={CHART_MARGIN} accessibilityLayer>
           <CartesianGrid {...GRID_PROPS} />
           <XAxis dataKey="label" {...AXIS_PROPS} interval="preserveStartEnd" />
           <YAxis
             {...AXIS_PROPS}
             tickFormatter={(val) => `${cur}${formatToK(val)}`}
-            domain={calculateYAxisDomain(rows, ['billed', 'collected'], 0.15)}
+            // The stack's height is collected + owed, which is max(billed,
+            // collected). Measuring the domain against 'billed' alone would
+            // clip any column where an old bill was settled.
+            domain={calculateYAxisDomain(rows.map((r) => ({ top: r.collected + r.owed })), ['top'])}
             // Wide enough for the longest tick this can produce, "₹276.1k".
             width={58}
           />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value, name) => [formatMoney(value), name === 'collected' ? 'Collected' : 'Billed']}
+            cursor={{ fill: '#f6f6fa' }}
+            formatter={(value, name) => [
+              formatMoney(value),
+              name === 'collected' ? 'Collected' : 'Still owed',
+            ]}
           />
-          <Area
-            type="monotone" dataKey="collected"
-            stroke={COLORS.primary} strokeWidth={2.5} fill="url(#areaPrimary)"
-            activeDot={{ r: 4, strokeWidth: 0 }}
+          <Bar
+            dataKey="collected" stackId="money" fill={SERIES.strong}
+            maxBarSize={BAR_MAX} radius={BAR_RADIUS} {...stackGap}
           />
-          <Line
-            type="monotone" dataKey="billed"
-            stroke={COLORS.warning} strokeWidth={2} strokeDasharray="5 4" dot={false}
+          <Bar
+            dataKey="owed" stackId="money" fill={SERIES.soft}
+            maxBarSize={BAR_MAX} radius={BAR_RADIUS} {...stackGap}
           />
-        </ComposedChart>
+        </BarChart>
       </ResponsiveContainer>
     </ChartCard>
   );

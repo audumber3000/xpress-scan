@@ -5,6 +5,9 @@
 // Re-exported here because the dashboard's charts already import them from
 // this module.
 export { formatCompactMoney, formatMoney, formatCount } from '../../utils/currency';
+// Delta phrasing lives in utils too, because MetricCard (shared with
+// Payments and Expenses) needs it and must not import out of a page folder.
+export { describeDelta, SMALL_BASE } from '../../utils/delta';
 
 // 10000 -> "10k", 10200 -> "10.2k". Axis ticks only — no currency symbol.
 export const formatToK = (value) => {
@@ -35,7 +38,14 @@ const getNiceStep = (min, max) => {
 };
 
 // Dynamic Y-axis [min, max] with padding, rounded to nice numbers.
-export const calculateYAxisDomain = (data, dataKeys, paddingPercent = 0.15) => {
+//
+// Padding now defaults to 0. It was 0.15, which bought headroom nobody asked
+// for: the domain was already rounded up to the next nice step, so the extra
+// 15% put a second empty step above the data and every bar on the dashboard
+// rendered shorter than it should. The tallest mark should reach the top
+// gridline. A caller that genuinely needs room above the data (an end-label
+// sitting on the cap) passes its own padding.
+export const calculateYAxisDomain = (data, dataKeys, paddingPercent = 0) => {
   if (!data || data.length === 0) return [0, 100];
 
   const keys = Array.isArray(dataKeys) ? dataKeys : [dataKeys];

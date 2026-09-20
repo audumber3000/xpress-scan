@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, extract, case
+from sqlalchemy import func, and_, or_, extract, case
 from datetime import datetime, timedelta
 from typing import Optional
 import csv
 import io
 from database import get_db
-from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock, CasePaper, InvoicePayment
+from models import Patient, Report, Payment, User, TreatmentType, Appointment, Clinic, Invoice, LabOrder, InventoryItem, MedicationStock, CasePaper, InvoicePayment, InvoiceLineItem
 from core.auth_utils import get_current_user
 from core.clinic_time import clinic_today
+from core import festivals, weather
 from domains.scheduling.appointment_status import ARRIVED
 
 router = APIRouter()
@@ -296,6 +297,11 @@ def get_dashboard_metrics(
         "total_patients": {
             "value": patients_count,
             "change": patient_change,
+            # What the percentage was measured against. A 1 -> 9 move is a
+            # truthful 800%, and on a chart whose tallest bar is 3 it reads as
+            # seeded demo data rather than information, so the card needs the
+            # base to decide whether a percentage is worth showing at all.
+            "previous": prev_patients,
             "change_type": "up" if patient_change >= 0 else "down",
             "sparkline": patients_sparkline,
             "last_30_days": patients_last_30,
@@ -303,6 +309,7 @@ def get_dashboard_metrics(
         "appointments": {
             "value": appointments_count,
             "change": appointment_change,
+            "previous": prev_appointments,
             "change_type": "up" if appointment_change >= 0 else "down",
             "completed": appt_completed,
             "scheduled": appt_scheduled,
@@ -319,6 +326,7 @@ def get_dashboard_metrics(
         "outstanding": {
             "value": round(dues_amount, 2),
             "change": dues_trend,
+            "previous": round(prev_dues_amount, 2),
             "change_type": "up" if dues_trend >= 0 else "down",
             "invert": True,
             "invoice_count": dues_count,
@@ -328,6 +336,7 @@ def get_dashboard_metrics(
         "revenue": {
             "value": float(revenue),
             "change": revenue_trend,
+            "previous": round(float(prev_revenue), 2),
             "change_type": "up" if revenue_trend >= 0 else "down",
             "billed": round(billed, 2),
             "collected_today": round(revenue_today, 2),
@@ -531,55 +540,95 @@ def get_revenue_analytics(
     """Revenue analytics by time period.
 
     Returns two series per bucket so the chart can show the collection gap:
-      - collected: money actually received (successful payments + paid invoices)
+      - collected: money actually received, from the part-payment ledger
       - billed:    value invoiced in that bucket (finalized, non-cancelled)
     The space between billed and collected is the period's receivable.
+
+    ─── Both series were measured wrongly, and disagreed with the KPI card ───
+
+    `collected` was sum(Payment.amount) plus sum(Invoice.total) for invoices
+    marked fully paid. The metrics endpoint's own _collected() documents why
+    that is wrong three ways: the `payments` table has held 0 rows since
+    part-payments arrived, counting only fully-paid invoices drops every
+    instalment, and Invoice.total is what was charged rather than what came in,
+    so a discounted bill reported more money than the clinic received. The
+    dashboard was therefore drawing one collected figure in the hero card and a
+    different one in the chart directly below it.
+
+    `billed` was dated on Invoice.created_at while the card's billed figure uses
+    coalesce(finalized_at, created_at), so a bill drafted in one month and
+    finalized in the next landed in different periods in the two places.
+
+    Both now match the card: invoice_payments.paid_on for money in,
+    coalesce(finalized_at, created_at) for money out.
     """
     final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
     now = datetime.utcnow()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-
-    # Dynamic target: 10k default, or 20% more than average if data exists
-    avg_rev = db.query(func.avg(Payment.amount)).filter(
-        and_(Payment.clinic_id == final_clinic_id, Payment.status == "success")
-    ).scalar() or 0
 
     buckets = period_buckets(period, db, final_clinic_id, now)
     if not buckets:
         return []
 
-    target = max(10000.0, float(avg_rev) * 1.2)
-    if period in ("today", "yesterday"):
-        target = target / 24
-
     range_start, range_end = buckets[0][1], buckets[-1][2]
     collected = [0.0] * len(buckets)
     billed = [0.0] * len(buckets)
 
-    # Three queries for the whole chart instead of three per bucket.
-    for created_at, amount in db.query(Payment.created_at, Payment.amount).filter(
-        and_(Payment.clinic_id == final_clinic_id, Payment.status == "success",
-             Payment.created_at >= range_start, Payment.created_at < range_end)
-    ).all():
-        idx = _bucket_index(buckets, created_at)
+    # paid_on is a Date, so on an hourly axis (a single day) every payment would
+    # pile into the 00:00 bucket. created_at is a timestamp written when the
+    # front desk recorded the payment, which on that same day is the honest
+    # answer to "when did this come in". Off a single day the booked date is the
+    # better one, because a payment back-dated to when it was actually received
+    # belongs in that day's column, not in the day someone got round to entering it.
+    hourly = period in ("today", "yesterday")
+
+    if hourly:
+        payment_rows = db.query(
+            InvoicePayment.created_at, InvoicePayment.amount
+        ).filter(
+            and_(
+                InvoicePayment.clinic_id == final_clinic_id,
+                InvoicePayment.created_at >= range_start,
+                InvoicePayment.created_at < range_end,
+            )
+        ).all()
+        received = [(when, amount) for when, amount in payment_rows]
+    else:
+        payment_rows = db.query(
+            InvoicePayment.paid_on, InvoicePayment.created_at, InvoicePayment.amount
+        ).filter(
+            and_(
+                InvoicePayment.clinic_id == final_clinic_id,
+                or_(
+                    and_(
+                        InvoicePayment.paid_on.isnot(None),
+                        InvoicePayment.paid_on >= range_start.date(),
+                        InvoicePayment.paid_on < range_end.date(),
+                    ),
+                    and_(
+                        InvoicePayment.paid_on.is_(None),
+                        InvoicePayment.created_at >= range_start,
+                        InvoicePayment.created_at < range_end,
+                    ),
+                ),
+            )
+        ).all()
+        received = [
+            (datetime.combine(paid_on, datetime.min.time()) if paid_on else created_at, amount)
+            for paid_on, created_at, amount in payment_rows
+        ]
+
+    for when, amount in received:
+        idx = _bucket_index(buckets, when)
         if idx is not None:
             collected[idx] += float(amount or 0)
 
-    for updated_at, total in db.query(Invoice.updated_at, Invoice.total).filter(
-        and_(Invoice.clinic_id == final_clinic_id,
-             Invoice.status.in_(["paid_verified", "paid_unverified"]),
-             Invoice.updated_at >= range_start, Invoice.updated_at < range_end)
-    ).all():
-        idx = _bucket_index(buckets, updated_at)
-        if idx is not None:
-            collected[idx] += float(total or 0)
-
-    for created_at, total in db.query(Invoice.created_at, Invoice.total).filter(
+    invoice_date = func.coalesce(Invoice.finalized_at, Invoice.created_at)
+    for dated, total in db.query(invoice_date, Invoice.total).filter(
         and_(Invoice.clinic_id == final_clinic_id,
              Invoice.status.notin_(["draft", "cancelled"]),
-             Invoice.created_at >= range_start, Invoice.created_at < range_end)
+             invoice_date >= range_start, invoice_date < range_end)
     ).all():
-        idx = _bucket_index(buckets, created_at)
+        idx = _bucket_index(buckets, dated)
         if idx is not None:
             billed[idx] += float(total or 0)
 
@@ -588,8 +637,7 @@ def get_revenue_analytics(
             "label": label,
             "collected": round(collected[i], 2),
             "billed": round(billed[i], 2),
-            "revenue": round(collected[i], 2),  # backwards-compat alias
-            "target": target,
+            "revenue": round(collected[i], 2),  # backwards-compat alias (mobile)
         }
         for i, (label, _, _) in enumerate(buckets)
     ]
@@ -834,7 +882,14 @@ def _month_activity(db, clinic_id, month_start, today_date):
         "year": month_start.year,
         "month": month_start.month,
         "today": today_date.isoformat(),
-        "days": [{"date": day, **counts} for day, counts in sorted(activity.items())],
+        # `people` is what the calendar cell now shades and prints: how many
+        # human beings that day involved, booked visits plus walk-in
+        # registrations. Derived rather than queried a fifth time — both parts
+        # were already counted above.
+        "days": [
+            {"date": day, **counts, "people": counts["appointments"] + counts["patients"]}
+            for day, counts in sorted(activity.items())
+        ],
     }
 
 
@@ -1348,17 +1403,21 @@ def get_dashboard_preferences(
     if user and getattr(user, 'dashboard_preferences', None):
         return user.dashboard_preferences
     
-    # Return default preferences if none exist
+    # Return default preferences if none exist.
+    #
+    # These are the four charts the dashboard renders today. The frontend merges
+    # whatever comes back over its own defaults rather than replacing them, so a
+    # user who saved the old key set still gets every current chart — but this
+    # list is what a brand new user starts from, and it has to name the charts
+    # that actually exist. It used to list four widgets that were removed and
+    # four (dentalChairs, chairUtilization, treatments, quality) that were never
+    # built.
     return {
         "visible_widgets": {
-            "patientStats": True,
-            "demographics": True,
-            "revenue": True,
-            "appointments": True,
-            "dentalChairs": True,
-            "chairUtilization": True,
-            "treatments": True,
-            "quality": True
+            "cashflow": True,
+            "treatmentRevenue": True,
+            "chairLoad": True,
+            "receivables": True
         }
     }
 
@@ -1808,3 +1867,332 @@ def export_dashboard(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# The chart row.
+#
+# These three back the charts that replaced the old set. The old four asked
+# "how many patients, of which gender, billed how much, and how did the
+# appointments end" — three of which the KPI cards above them already answered.
+# These ask the questions the cards cannot: what earns the money, when the chair
+# is actually busy, and how old the unpaid money is.
+#
+# All three are read-only, and all three bucket in Python rather than SQL
+# date_trunc for the reason given at get_appointment_trends: the bundled desktop
+# build runs SQLite, which has no date_trunc.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# How many named rows a ranking chart shows before the tail is folded into
+# "Other". Six is the point past which a horizontal bar list stops being
+# readable at a glance and becomes a table that should have been a table.
+TREATMENT_ROWS = 6
+
+
+def _normalise_treatment(raw: str) -> str:
+    """Collapse the spellings of one treatment into a single grouping key.
+
+    Line item descriptions are free text typed at the desk, so one clinic bills
+    "RCT", "rct ", "R.C.T" and "Rct  - 36" for the same procedure. Without this
+    the chart's top row is whichever spelling happened to be used most, and the
+    treatment's real share is split four ways across rows the doctor reads as
+    four different procedures.
+
+    Deliberately shallow: case, surrounding space and internal runs of space are
+    normalised, and nothing else. Stripping punctuation or stemming would start
+    merging things that are genuinely different ("crown" and "crown removal"),
+    and a chart that silently merges two procedures is worse than one that
+    splits a spelling.
+    """
+    return " ".join((raw or "").split()).casefold()
+
+
+@router.get("/treatments/revenue")
+def get_treatment_revenue(
+    period: str = "month",  # today, yesterday, 7days, month, all
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """What the clinic actually earns its money doing.
+
+    Revenue per treatment, from the invoice line items, alongside how many
+    invoices carried that treatment. The pairing is the point: a procedure can
+    be 40% of the visits and 9% of the money, and no other screen in this
+    product puts those two numbers next to each other.
+
+    Dated on coalesce(finalized_at, created_at) — the same basis the KPI card's
+    `billed` figure uses — so the totals here and the total on the Revenue card
+    cover the same invoices for the same window. `created_at` alone (which the
+    /revenue chart used) drifts from the card whenever a bill is raised in one
+    period and finalized in another.
+    """
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    start_date, end_date, _, _ = period_range(period)
+
+    invoice_date = func.coalesce(Invoice.finalized_at, Invoice.created_at)
+
+    rows = (
+        db.query(InvoiceLineItem.description, InvoiceLineItem.amount, InvoiceLineItem.invoice_id)
+        .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
+        .filter(
+            and_(
+                Invoice.clinic_id == final_clinic_id,
+                Invoice.status.notin_(['draft', 'cancelled']),
+                invoice_date >= start_date,
+                invoice_date < end_date,
+            )
+        )
+        .all()
+    )
+
+    # key -> {display, amount, invoices}. The display name is the first spelling
+    # seen rather than a title-cased reconstruction: "RCT" must not come back as
+    # "Rct", and the desk's own wording is what the doctor recognises.
+    grouped = {}
+    all_invoices = set()
+    for description, amount, invoice_id in rows:
+        key = _normalise_treatment(description)
+        if not key:
+            continue
+        entry = grouped.setdefault(key, {"name": (description or "").strip(), "amount": 0.0, "invoices": set()})
+        entry["amount"] += float(amount or 0)
+        entry["invoices"].add(invoice_id)
+        all_invoices.add(invoice_id)
+
+    total = sum(e["amount"] for e in grouped.values())
+    total_visits = len(all_invoices)
+
+    ordered = sorted(grouped.values(), key=lambda e: e["amount"], reverse=True)
+    head, tail = ordered[:TREATMENT_ROWS], ordered[TREATMENT_ROWS:]
+
+    def _shape(name, amount, visits):
+        return {
+            "name": name,
+            "amount": round(amount, 2),
+            "share": round(amount / total * 100, 1) if total else 0.0,
+            "visits": visits,
+            "visit_share": round(visits / total_visits * 100, 1) if total_visits else 0.0,
+        }
+
+    out = [_shape(e["name"], e["amount"], len(e["invoices"])) for e in head]
+
+    if tail:
+        # The tail's invoice count is a union, not a sum: one bill carrying three
+        # different minor treatments is one visit, and summing would report it
+        # three times and push "Other" above 100% of visits.
+        tail_invoices = set()
+        for e in tail:
+            tail_invoices |= e["invoices"]
+        out.append(_shape(f"Other ({len(tail)})", sum(e["amount"] for e in tail), len(tail_invoices)))
+
+    return {
+        "total": round(total, 2),
+        "total_visits": total_visits,
+        "rows": out,
+    }
+
+
+# The grid the chair-load heatmap is drawn on: seven 2-hour windows covering
+# 8am to 10pm, matching the windows get_appointment_trends already uses for a
+# single day so the two never disagree about when "the afternoon" is.
+CHAIR_HOURS = list(range(8, 22, 2))
+
+
+@router.get("/chair-load")
+def get_chair_load(
+    period: str = "month",  # today, yesterday, 7days, month, all
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """When the chair is actually busy, as weekday × 2-hour window.
+
+    The shape nobody can see from a list of appointments: which mornings are
+    packed and which afternoons are dead. Counts booked minutes as well as
+    appointments, because six 15-minute check-ups and two 45-minute fillings
+    are the same number of bookings and very different amounts of chair time.
+
+    Appointments outside 8am–10pm are counted into `outside` rather than being
+    clamped into the nearest edge window. Clamping would draw a busy 8am on a
+    clinic whose early list is actually at 7, and dropping them silently would
+    make the totals here disagree with the appointment count on the KPI card.
+    """
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    start_date, end_date, _, _ = period_range(period)
+
+    # weekday (Mon=0) × window start hour → counts
+    cells = {(d, h): {"count": 0, "minutes": 0} for d in range(7) for h in CHAIR_HOURS}
+    outside = 0
+
+    MISSED = {"no-show", "no_show", "cancelled"}
+
+    for appt_date, start_time, duration, status in db.query(
+        Appointment.appointment_date, Appointment.start_time,
+        Appointment.duration, Appointment.status,
+    ).filter(
+        and_(
+            Appointment.clinic_id == final_clinic_id,
+            Appointment.appointment_date >= start_date,
+            Appointment.appointment_date < end_date,
+        )
+    ).all():
+        if appt_date is None:
+            continue
+        # A cancelled slot consumed no chair time. Counting it would draw a busy
+        # Tuesday out of a Tuesday nobody attended, which is the opposite of
+        # what this chart is for.
+        if (status or "").lower() in MISSED:
+            continue
+
+        # start_time is the booked clock time ("09:30"); appointment_date is the
+        # fallback for rows written before start_time was populated.
+        hour = None
+        if start_time:
+            try:
+                hour = int(str(start_time).split(":")[0])
+            except (ValueError, IndexError):
+                hour = None
+        if hour is None:
+            hour = appt_date.hour
+
+        window = hour - (hour % 2)
+        key = (appt_date.weekday(), window)
+        if key not in cells:
+            outside += 1
+            continue
+
+        cells[key]["count"] += 1
+        cells[key]["minutes"] += int(duration or 0)
+
+    return {
+        "hours": CHAIR_HOURS,
+        "cells": [
+            {"weekday": d, "hour": h, "count": c["count"], "minutes": c["minutes"]}
+            for (d, h), c in sorted(cells.items())
+        ],
+        "outside": outside,
+    }
+
+
+# Receivable age bands, in days. Upper bound is exclusive; the last band is
+# open-ended. Ordered oldest-last so the chart can walk them straight through
+# and shade them light to dark without re-sorting.
+AGING_BANDS = [
+    ("0-15", 0, 16),
+    ("16-30", 16, 31),
+    ("31-60", 31, 61),
+    ("60+", 61, None),
+]
+
+
+@router.get("/receivables/aging")
+def get_receivables_aging(
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Unpaid money, split by how long it has been waiting.
+
+    Deliberately NOT period-filtered, for the same reason the Outstanding KPI
+    card isn't: money owed is owed regardless of which window the header shows,
+    and a receivables figure that shrank when you switched to "Today" would be
+    actively misleading. The card says so in its own subtitle rather than
+    sitting silently under a filter that does not apply to it — which is the
+    mistake the gender donut this replaced was making.
+
+    Same filter as the Outstanding card (due_amount > 0, not draft or
+    cancelled), so the bands here always sum to the number on that card.
+    """
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    now = datetime.utcnow()
+
+    invoice_date = func.coalesce(Invoice.finalized_at, Invoice.created_at)
+
+    rows = db.query(invoice_date, Invoice.due_amount).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.due_amount > 0,
+            Invoice.status.notin_(['draft', 'cancelled']),
+        )
+    ).all()
+
+    buckets = {label: {"amount": 0.0, "count": 0} for label, _, _ in AGING_BANDS}
+    oldest_days = 0
+
+    for dated, due in rows:
+        # An invoice with no date at all is treated as brand new rather than
+        # ancient: guessing "very old" would put money in the red band on the
+        # strength of a missing column.
+        age = (now - dated).days if dated else 0
+        age = max(0, age)
+        oldest_days = max(oldest_days, age)
+        for label, low, high in AGING_BANDS:
+            if age >= low and (high is None or age < high):
+                buckets[label]["amount"] += float(due or 0)
+                buckets[label]["count"] += 1
+                break
+
+    total = sum(b["amount"] for b in buckets.values())
+
+    return {
+        "total": round(total, 2),
+        "count": sum(b["count"] for b in buckets.values()),
+        "oldest_days": oldest_days,
+        "bands": [
+            {
+                "label": label,
+                "amount": round(buckets[label]["amount"], 2),
+                "count": buckets[label]["count"],
+                "share": round(buckets[label]["amount"] / total * 100, 1) if total else 0.0,
+            }
+            for label, _, _ in AGING_BANDS
+        ],
+    }
+
+
+@router.get("/ambient")
+def get_ambient(
+    clinic_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """The two ambient notes on the dashboard header: weather, and what is
+    coming up.
+
+    Neither is a metric and neither is actionable on its own, which is exactly
+    why they live in the header strip and not in a card. They answer "what kind
+    of day is this going to be" before the numbers answer "how did it go".
+
+    Both halves are independently optional and the endpoint never fails:
+    whatever it cannot work out, it leaves out, and the strip renders the rest.
+    A clinic with no coordinates gets festivals only; one outside India gets
+    weather only; one with neither gets an empty payload and the strip does not
+    render at all.
+    """
+    final_clinic_id = clinic_id if (clinic_id and current_user.role == 'clinic_owner') else current_user.clinic_id
+    clinic = db.query(Clinic).filter(Clinic.id == final_clinic_id).first()
+    if not clinic:
+        return {"weather": None, "festival": None}
+
+    # Indian festivals go to Indian clinics only. `country` defaults to 'IN' on
+    # the column, so this is a weak test on its own — a clinic that never set a
+    # country reads as Indian. Paired with the currency it is a good deal
+    # stronger: a UK clinic billing in GBP will have moved at least one of the
+    # two, and the cost of the remaining false positive is a line about Diwali
+    # rather than anything that touches money or records.
+    country = (getattr(clinic, "country", None) or "IN").upper()
+    currency = (getattr(clinic, "currency_code", None) or "INR").upper()
+    is_indian = country == "IN" and currency == "INR"
+
+    festival = None
+    if is_indian:
+        try:
+            festival = festivals.upcoming(clinic_today(clinic))
+        except Exception:
+            festival = None
+
+    return {
+        "weather": weather.for_clinic(clinic),
+        "festival": festival,
+    }

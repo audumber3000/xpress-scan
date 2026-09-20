@@ -8,12 +8,17 @@ export const ToothIcon = () => <i className="las la-tooth text-2xl"></i>;
 export const CalendarCheckIcon = () => <i className="las la-calendar-check text-2xl"></i>;
 export const ChairIcon = () => <i className="las la-procedures text-2xl"></i>;
 export const RevenueIcon = () => <i className="las la-money-bill-wave text-2xl opacity-80"></i>;
+// Outstanding had been borrowing RevenueIcon, so the KPI row showed the same
+// banknote twice in four cards and the two money figures were the hardest
+// pair on the row to tell apart at a glance. An unpaid bill is its own thing.
+export const OutstandingIcon = () => <i className="las la-file-invoice-dollar text-2xl opacity-80"></i>;
 
 export const METRIC_ICONS = {
   tooth: ToothIcon,
   calendar: CalendarCheckIcon,
   chair: ChairIcon,
   revenue: RevenueIcon,
+  outstanding: OutstandingIcon,
 };
 
 // Purple AI Sparkle (two four-pointed stars)

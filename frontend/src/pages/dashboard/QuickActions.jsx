@@ -24,7 +24,7 @@ const ACTIONS = [
 const QuickActions = () => {
   const navigate = useNavigate();
   return (
-    <div className="flex gap-2 mb-4 md:mb-5 overflow-x-auto -mx-1 px-1 pb-1 [&::-webkit-scrollbar]:hidden">
+    <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1 min-w-0 [&::-webkit-scrollbar]:hidden">
       {ACTIONS.map(({ label, icon: Icon, to }) => (
         <button
           key={label}
