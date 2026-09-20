@@ -21,10 +21,11 @@ plan the header shows, so a Pro trial includes it and an expired trial does not.
 
 ## Currency
 
-India only, for now. Cashfree international collections is off
-(`CASHFREE_INTERNATIONAL_ENABLED`), so an add-on is not offered outside India at
-all rather than quoted in a currency we cannot charge. Same rule as plans: an
-Indian clinic is never shown a dollar figure, and here nobody is shown one.
+India only, for now. Plans abroad are paid in dollars through Dodo Payments
+(core.payment_gateways), but no add-on has a dollar price yet, so an add-on is
+not offered outside India at all rather than quoted in a currency it has no
+price in. Same rule as plans: an Indian clinic is never shown a dollar figure,
+and here nobody is shown one.
 
 ## Coming soon
 

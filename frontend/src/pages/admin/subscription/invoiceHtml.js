@@ -1,4 +1,4 @@
-import { formatPrice } from '../../../utils/plans';
+import { formatPrice, paymentGateway } from '../../../utils/plans';
 
 /**
  * A printable invoice for one subscription payment.
@@ -20,6 +20,11 @@ import { formatPrice } from '../../../utils/plans';
  *    was given 20% off should be able to see that it was, and the line sits
  *    ABOVE the tax line because that is the order it was applied in: the
  *    discount reduces the taxable value rather than the tax reducing it.
+ * 4. A dollar payment is a receipt, not a tax invoice. Dodo Payments sells to
+ *    clinics abroad as merchant of record, so the tax on it is sales tax or VAT
+ *    that Dodo collected and invoices for itself. Calling it GST, or calling
+ *    this page a tax invoice, would be a document claiming a tax we never
+ *    charged.
  */
 export function buildInvoiceHtml(inv, clinicName = '') {
   const currency = inv.currency || 'INR';
@@ -39,6 +44,11 @@ export function buildInvoiceHtml(inv, clinicName = '') {
   // a tax invoice is the one thing an accountant will notice.
   const listBase = taxable + discount;
   const taxPct = tax && taxable ? Math.round((tax / taxable) * 100) : 0;
+  const isGst = currency === 'INR';
+  const gatewayLabel = inv.provider === 'dodo' ? 'Dodo Payments'
+    : inv.provider === 'cashfree' ? 'Cashfree'
+    : paymentGateway(currency).label;
+  const title = !isGst ? 'RECEIPT' : tax ? 'TAX INVOICE' : 'INVOICE';
 
   const row = (label, value, bold = false) => `
         <tr${bold ? ' class="total-row"' : ''}>
@@ -100,7 +110,7 @@ export function buildInvoiceHtml(inv, clinicName = '') {
       </div>
     </div>
     <div class="invoice-meta">
-      <div class="invoice-title">${tax ? 'TAX INVOICE' : 'INVOICE'}</div>
+      <div class="invoice-title">${title}</div>
       <div class="invoice-num">${inv.invoice}</div>
       <div class="badges">
         <span class="badge ${inv.status === 'PAID' ? 'badge-paid' : 'badge-pending'}">${inv.status}</span>
@@ -118,7 +128,7 @@ export function buildInvoiceHtml(inv, clinicName = '') {
     <div>
       <div class="section-label">${clinicName ? 'Billed to' : 'Invoice details'}</div>
       <div class="info-card">
-        <p>${clinicName ? `<strong>${clinicName}</strong><br/>` : ''}<strong>Invoice Date:</strong> ${inv.date}<br/><strong>Invoice No:</strong> ${inv.invoice}<br/><strong>Payment:</strong> Cashfree</p>
+        <p>${clinicName ? `<strong>${clinicName}</strong><br/>` : ''}<strong>Invoice Date:</strong> ${inv.date}<br/><strong>Invoice No:</strong> ${inv.invoice}<br/><strong>Payment:</strong> ${gatewayLabel}</p>
       </div>
     </div>
   </div>
@@ -142,14 +152,15 @@ export function buildInvoiceHtml(inv, clinicName = '') {
         ${discount > 0
           ? row(`Discount${inv.coupon_code ? ` (${inv.coupon_code})` : ''}`, `-${money(discount)}`)
           : ''}
-        ${tax ? row(`GST at ${taxPct}%`, money(tax)) : ''}
+        ${tax ? row(isGst ? `GST at ${taxPct}%` : `Local tax, included and collected by ${gatewayLabel}`, money(tax)) : ''}
         ${row('Total', money(total), true)}
       </tbody>
     </table>
   </div>
 
   <div class="footer">
-    Thank you for using MolarPlus · This is a computer-generated invoice · No signature required<br/>
+    Thank you for using MolarPlus · This is a computer-generated ${isGst ? 'invoice' : 'receipt'} · No signature required<br/>
+    ${isGst ? '' : `${gatewayLabel} is the merchant of record for this payment and issues its tax invoice.<br/>`}
     For support: support@molarplus.com
   </div>
 

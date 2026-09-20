@@ -113,15 +113,19 @@ export const NetbankingMark = () => (
  * Order is deliberate: UPI first because it is how most Indian clinics will
  * pay, then the card networks, then netbanking. Wraps rather than scrolls, so
  * nothing is hidden off the edge on a phone.
+ *
+ * `international` is a clinic abroad paying in dollars through Dodo Payments,
+ * where UPI, RuPay and Indian netbanking are not on offer. Showing them there
+ * would promise a way to pay that the next page does not have.
  */
-const PaymentMarks = ({ className = '' }) => (
+const PaymentMarks = ({ className = '', international = false }) => (
   <div className={`flex items-center gap-1.5 flex-wrap ${className}`}>
-    <UpiMark />
+    {!international && <UpiMark />}
     <VisaMark />
     <MastercardMark />
-    <RuPayMark />
+    {!international && <RuPayMark />}
     <AmexMark />
-    <NetbankingMark />
+    {!international && <NetbankingMark />}
   </div>
 );
 

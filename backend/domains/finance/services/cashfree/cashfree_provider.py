@@ -48,10 +48,10 @@ class CashfreeProvider(BasePaymentProvider):
         """
         Create a Cashfree Order.
 
-        `currency` defaults to INR, which is what every existing caller (wallet
-        top-ups, Indian subscriptions) wants and what this used to hardcode.
-        Anything else requires international collections to be enabled on the
-        Cashfree account; see core.plans and CASHFREE_INTERNATIONAL_ENABLED.
+        `currency` defaults to INR, which is what every caller (wallet
+        top-ups, Indian subscriptions and add-ons) wants and what this used to
+        hardcode. Dollar orders do not come here: they go through Dodo
+        Payments (core.payment_gateways).
         """
         url = f"{self.base_url}/orders"
         

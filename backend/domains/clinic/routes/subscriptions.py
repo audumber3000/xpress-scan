@@ -411,6 +411,9 @@ async def get_billing_history(
                 "amount": p.amount,
                 "tax_amount": p.tax_amount,
                 "currency": p.currency or "INR",
+                # Who took the money. The invoice names it, and for a Dodo
+                # payment the tax on it is Dodo's to state, not GST.
+                "provider": p.provider,
                 "date": (p.paid_at or p.created_at).strftime("%-d %b %Y"),
                 "status": (p.status or "").upper(),
             }
@@ -439,6 +442,7 @@ async def get_billing_history(
         "plan": plans.label(subscription.plan_name),
         "amount": plans.price(subscription.plan_name, plans.billing_currency(clinic)),
         "currency": plans.billing_currency(clinic),
+        "provider": subscription.provider,
         "date": (subscription.current_start or subscription.created_at or datetime.utcnow()).strftime("%-d %b %Y"),
         "status": "PAID" if subscription.status == "active" else subscription.status.upper(),
     }
@@ -546,7 +550,9 @@ async def create_checkout(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Initiate a checkout session for a plan linked to the current user"""
+    """Open a checkout for a plan. Rupees go through Cashfree and the answer
+    carries `payment_session_id`; dollars go through Dodo and it carries
+    `checkout_url`. `provider` says which, and the client follows it."""
     _require_owner(current_user)
     if not current_user.clinic_id:
         raise HTTPException(status_code=400, detail="User not in clinic")
@@ -602,6 +608,46 @@ async def verify_subscription_status(
         raise HTTPException(status_code=400, detail=result["message"])
         
     return result
+
+@router.post("/webhook/dodo")
+async def dodo_webhook(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Handle Dodo Payments webhooks, the dollar twin of /webhook/cashfree.
+
+    Same contract: 401 for anything unauthenticated, 500 on a processing error
+    so Dodo retries, 200 for everything else including events we ignore.
+    """
+    import json as _json
+    from core import dodo_webhook
+
+    raw_body = await request.body()
+
+    ok, reason = dodo_webhook.verify_request(raw_body, request.headers)
+    if not ok:
+        logger.warning(f"dodo webhook rejected: {reason}")
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    try:
+        payload = _json.loads(raw_body)
+        from core import addons, payment_gateways
+        order_id = ((payload.get("data") or {}).get("metadata") or {}).get("order_id")
+        if addons.is_addon_order(order_id):
+            # Add-ons are not sold outside India, so no add-on order should
+            # ever be on Dodo. If one is, it is a person's money: say so loudly
+            # and let support settle it by hand.
+            logger.error(f"dodo webhook for add-on order {order_id}; add-ons are not sold on Dodo")
+            return {"status": "received", "message": "Webhook acknowledged"}
+
+        if SubscriptionService(db).handle_webhook(payment_gateways.DODO, payload):
+            return {"status": "ok", "message": "Processed successfully"}
+        return {"status": "received", "message": "Webhook acknowledged"}
+
+    except Exception as e:
+        logger.exception(f"dodo webhook processing failed: {e}")
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
+
 
 @router.post("/webhook/cashfree")
 async def cashfree_webhook(

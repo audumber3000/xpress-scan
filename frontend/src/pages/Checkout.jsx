@@ -5,10 +5,10 @@ import { api } from '../utils/api';
 import { track, EVENTS } from '../analytics/track';
 import { ChevronLeft, ShieldCheck, Lock, Tag, CheckCircle2, ArrowRight, X } from 'lucide-react';
 import GearLoader from '../components/GearLoader';
-import { cashfreeService } from '../services/payments/cashfree/cashfree_service';
+import { startPlanCheckout, startAddonCheckout } from '../services/payments/checkout';
 import PaymentMarks from '../components/payments/PaymentMarks';
 import PaymentHelp from '../components/payments/PaymentHelp';
-import { usePlanCatalogue, resolvePlan, planLabel, formatPrice } from '../utils/plans';
+import { usePlanCatalogue, resolvePlan, planLabel, formatPrice, paymentGateway } from '../utils/plans';
 import { useAddonCatalogue } from '../utils/addons';
 
 /**
@@ -92,6 +92,9 @@ const Checkout = () => {
       };
   const currency = product.currency;
   const money = (amount) => formatPrice(amount, currency);
+  // Rupees go through Cashfree, dollars through Dodo Payments. Wording only:
+  // the server picks the gateway and startPlanCheckout follows it.
+  const gateway = paymentGateway(currency);
 
   const checkoutPlanName = isAnnual ? `${planKey}_annual` : planKey;
   const listPrice = isAnnual ? product.annual_total : product.monthly;
@@ -153,9 +156,9 @@ const Checkout = () => {
     });
     try {
       if (isAddon) {
-        await cashfreeService.initiateAddonCheckout(addonKey, isAnnual ? 'annual' : 'monthly');
+        await startAddonCheckout(addonKey, isAnnual ? 'annual' : 'monthly');
       } else {
-        await cashfreeService.initiateCheckout(checkoutPlanName, discountInfo ? couponCode : null);
+        await startPlanCheckout(checkoutPlanName, discountInfo ? couponCode : null);
       }
     } catch (error) {
       notify.problem(error, 'Failed to initiate checkout');
@@ -274,7 +277,7 @@ const Checkout = () => {
               </div>
               {currency !== 'INR' && (
                 <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
-                  Charged in US dollars. Your bank may add a foreign transaction fee.
+                  Charged in US dollars, with any local sales tax or VAT already included. Your bank may add a foreign transaction fee.
                 </p>
               )}
             </div>
@@ -331,12 +334,12 @@ const Checkout = () => {
 
               <div className="border border-[#2a276e] bg-[#2a276e]/[0.04] rounded-xl p-3.5">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-bold text-[#2a276e]">Cashfree Secure Payment</span>
+                  <span className="text-sm font-bold text-[#2a276e]">{gateway.label} Secure Payment</span>
                   <CheckCircle2 size={16} className="text-[#2a276e] flex-shrink-0" />
                 </div>
                 {/* Marks rather than "Supports UPI, All Cards, Netbanking." in
                     grey italic, which read as a disclaimer. */}
-                <PaymentMarks className="mt-3" />
+                <PaymentMarks className="mt-3" international={gateway.key === 'dodo'} />
               </div>
 
               {isAddon && !addonsLoading && !addonBuyable ? (
@@ -365,7 +368,7 @@ const Checkout = () => {
               )}
 
               <p className="text-[11px] text-gray-500 text-center mt-2.5">
-                You will be taken to Cashfree to complete the payment.
+                You will be taken to {gateway.label} to complete the payment.
               </p>
 
               <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-4 pt-3.5 border-t border-gray-100 text-[11px] text-gray-400">
