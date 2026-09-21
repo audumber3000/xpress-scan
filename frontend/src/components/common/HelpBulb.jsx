@@ -31,8 +31,10 @@ export const HELP_CONTENT = {
         a: 'So the dashboard opens on your whole story rather than a month-to-date window that reads near-empty on the 1st. Change it from the dropdown at the top right and every card and chart follows.' },
       { q: 'What does Outstanding mean?',
         a: 'Money already billed on finalised invoices that has not been collected. It is deliberately not affected by the time filter: what you are owed is owed whichever window you are looking at.' },
-      { q: 'Why is a large slice of Patients by gender "Not recorded"?',
-        a: 'Gender is optional on the intake form. Anything not filled in is counted honestly rather than hidden, so the slices always add up to your real patient count.' },
+      { q: 'Why does Money waiting ignore the date filter?',
+        a: 'What you are owed is owed whichever window you are looking at, so that card always covers every unpaid bill and says so under its title. The other three charts follow the filter.' },
+      { q: 'What do the shaded days in the calendar mean?',
+        a: 'How many people that day involves, booked visits plus walk-in registrations. Darker is busier, and the same number is printed in the corner so you never have to judge it by colour alone. A day with nobody stays blank.' },
     ],
   },
   payments: {
