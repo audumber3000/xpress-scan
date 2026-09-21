@@ -20,7 +20,7 @@ router = APIRouter()
 
 # Template Routes
 @router.get("/templates", response_model=List[ConsentTemplateResponseDTO])
-async def list_templates(
+def list_templates(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
     clinic_id: Optional[int] = None

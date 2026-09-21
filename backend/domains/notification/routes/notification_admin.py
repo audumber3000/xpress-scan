@@ -4,6 +4,7 @@ import httpx
 import logging
 from datetime import datetime
 from typing import List, Optional
+from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, Header
 
 logger = logging.getLogger(__name__)
@@ -438,6 +439,15 @@ def _credit_wallet_topup(db: Session, order_id: str):
 
     SELECT ... FOR UPDATE serialises them: the second caller blocks until the
     first commits, then sees 'completed' and does nothing.
+
+    Every exit ends the transaction, including the one that credits nothing.
+    FOR UPDATE holds the row lock until the transaction ends, and the no-op
+    path used to just return — so the lock was held until the request's
+    session was torn down, after the response had been sent. On 2026-09-21
+    that took production down for 23 minutes: /wallet/verify found an order
+    already credited and returned still holding the lock, the webhook asked
+    for the same lock on the event loop, the frozen loop could not run
+    verify's teardown, and nothing could ever release it.
     """
     txn = (
         db.query(WalletTransaction)
@@ -446,6 +456,7 @@ def _credit_wallet_topup(db: Session, order_id: str):
         .first()
     )
     if not txn or txn.status != "pending":
+        db.rollback()  # releases the row lock now, not at teardown
         return None
 
     txn.status = "completed"
@@ -508,6 +519,23 @@ def verify_wallet_topup(
     return {"success": False, "status": cf_status, "message": f"Payment status: {cf_status}"}
 
 
+def _apply_wallet_webhook(db: Session, order_id: str) -> None:
+    """The blocking half of the wallet webhook. Runs in the thread pool."""
+    credited = _credit_wallet_topup(db, order_id)
+    if not credited:
+        return
+    txn, new_balance = credited
+    owner = db.query(User).filter(User.clinic_id == txn.clinic_id, User.role == 'clinic_owner').first()
+    clinic = db.query(Clinic).filter(Clinic.id == txn.clinic_id).first()
+    if owner and clinic:
+        PlatformNotificationService(db).send_wallet_topup_notifications(
+            clinic=clinic,
+            owner=owner,
+            amount=txn.amount,
+            new_balance=new_balance,
+        )
+
+
 @router.post("/wallet/webhook")
 async def wallet_cashfree_webhook(
     request: Request,
@@ -536,18 +564,13 @@ async def wallet_cashfree_webhook(
         payment_status = payload.get("data", {}).get("payment", {}).get("payment_status")
 
         if order_id.startswith("WALLET_") and payment_status == "SUCCESS":
-            credited = _credit_wallet_topup(db, order_id)
-            if credited:
-                txn, new_balance = credited
-                owner = db.query(User).filter(User.clinic_id == txn.clinic_id, User.role == 'clinic_owner').first()
-                clinic = db.query(Clinic).filter(Clinic.id == txn.clinic_id).first()
-                if owner and clinic:
-                    PlatformNotificationService(db).send_wallet_topup_notifications(
-                        clinic=clinic,
-                        owner=owner,
-                        amount=txn.amount,
-                        new_balance=new_balance,
-                    )
+            # In the thread pool, never on the event loop. This handler has to
+            # be async to read the raw body for the signature check, but
+            # everything after that is blocking: a SELECT ... FOR UPDATE that
+            # can wait on another request's lock, and a notification send that
+            # waits on the network. Run on the loop, either one freezes every
+            # request the server has — which is what the 2026-09-21 outage was.
+            await run_in_threadpool(_apply_wallet_webhook, db, order_id)
 
         return {"status": "ok"}
     except Exception as e:
