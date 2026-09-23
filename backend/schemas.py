@@ -267,6 +267,9 @@ class InvoiceCreate(InvoiceBase):
     # always sent its completed procedures here; until this field existed they
     # were dropped as an unknown key, and every invoice it created started empty.
     line_items: Optional[List[InvoiceLineItemBase]] = None
+    # YYYY-MM-DD in the clinic's calendar, for a bill raised after the visit.
+    # Omitted means today, which is every caller that predates it.
+    invoice_date: Optional[str] = None
 
 class InvoiceUpdate(BaseModel):
     payment_mode: Optional[str] = None
@@ -298,6 +301,10 @@ class InvoiceOut(InvoiceBase):
     finalized_at: Optional[datetime] = None
     paid_amount: float = 0.0
     due_amount: float = 0.0
+    # The date the bill is for, in the clinic's calendar (created_at is UTC and
+    # a datetime), and whether someone set it to a day before it was entered.
+    invoice_date: Optional[str] = None
+    back_dated: bool = False
     
     # Nested patient info
     patient_name: Optional[str] = None

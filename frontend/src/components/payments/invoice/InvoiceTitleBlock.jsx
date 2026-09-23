@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, Wallet, IndianRupee } from 'lucide-react';
 import { getCurrencySymbol } from '../../../utils/currency';
 import { formatDate, formatDateTime } from '../../../utils/datetime';
+import CasePaperDateField from '../../patient/CasePaperDateField';
 import { statusLabel, outstandingAge } from './invoiceStatus';
 import InvoiceStatCard from './InvoiceStatCard';
 
@@ -18,7 +19,7 @@ const money = (n) => `${getCurrencySymbol()}${Number(n || 0).toLocaleString('en-
  * `stats` overrides the cards on the right, so each tab shows the figures it is
  * actually about while the identity half stays identical across all three.
  */
-const InvoiceTitleBlock = ({ invoice, stats = null }) => {
+const InvoiceTitleBlock = ({ invoice, stats = null, onDateChange = null }) => {
   if (!invoice) return null;
 
   const { label, tone } = statusLabel(invoice);
@@ -49,7 +50,21 @@ const InvoiceTitleBlock = ({ invoice, stats = null }) => {
               </span>
             )}
           </div>
-          <p className="text-[11px] text-gray-500 mt-1.5">Created on {formatDateTime(invoice.created_at)}</p>
+          {/* The date is the bill's, not the typing's: a draft can be set to the
+              day the patient was actually in. Once issued it is fixed, and a
+              back-dated one says so rather than passing for a same-day bill. */}
+          {isDraft && onDateChange ? (
+            <div className="mt-1 text-[11px] text-gray-500">
+              <span>Invoice date{invoice.back_dated && <span className="text-amber-700"> · back-dated</span>}</span>
+              <CasePaperDateField value={invoice.created_at} onChange={onDateChange} />
+            </div>
+          ) : invoice.back_dated ? (
+            <p className="text-[11px] text-gray-500 mt-1.5">
+              Dated {formatDateTime(invoice.created_at)} <span className="text-amber-700">(back-dated)</span>
+            </p>
+          ) : (
+            <p className="text-[11px] text-gray-500 mt-1.5">Created on {formatDateTime(invoice.created_at)}</p>
+          )}
         </div>
       </div>
 

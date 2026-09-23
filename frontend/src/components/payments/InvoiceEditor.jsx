@@ -401,6 +401,32 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, onRefresh, prefill = null }
     }
   };
 
+  // The date field reports every keystroke. Show each one at once, but only
+  // save the value the user stops on: every save is an audit row, and "Invoice
+  // date changed" six times for one edit is a trail nobody can read.
+  const dateSaveRef = useRef(null);
+  useEffect(() => () => clearTimeout(dateSaveRef.current), []);
+  const savedDateRef = useRef(null);
+  const handleInvoiceDateChange = (iso) => {
+    if (savedDateRef.current == null) savedDateRef.current = invoice?.created_at;
+    setInvoice((prev) => (prev ? { ...prev, created_at: iso } : prev));
+    clearTimeout(dateSaveRef.current);
+    dateSaveRef.current = setTimeout(async () => {
+      try {
+        setActionError("");
+        setInvoice(await api.put(`/invoices/${currentInvoiceId}`, { invoice_date: iso }));
+        refreshList();
+      } catch (error) {
+        // A refused date (the future) must not stay on screen looking saved.
+        const saved = savedDateRef.current;
+        setInvoice((prev) => (prev ? { ...prev, created_at: saved } : prev));
+        fail(error, "Could not change the invoice date");
+      } finally {
+        savedDateRef.current = null;
+      }
+    }, 700);
+  };
+
   // Print opens the same PDF the download produces, in a tab, and asks the
   // browser to print it. Deliberately not a window.print() of the drawer: what
   // would come out is the app chrome, not the invoice the patient gets.
@@ -694,7 +720,10 @@ const InvoiceEditor = ({ invoiceId, onClose, onSave, onRefresh, prefill = null }
               </>
             ) : (
               <>
-                <InvoiceTitleBlock invoice={invoice} />
+                <InvoiceTitleBlock
+                  invoice={invoice}
+                  onDateChange={handleInvoiceDateChange}
+                />
 
                 <InvoiceSummaryStrip
                   invoice={invoice}

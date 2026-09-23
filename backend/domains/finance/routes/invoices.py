@@ -24,7 +24,7 @@ from models import Invoice, InvoiceLineItem, InvoiceAuditLog, InvoiceDiscount, I
 from core.auth_utils import get_current_user
 import logging as _logging
 from core.master_password import require_master_token
-from core.clinic_time import clinic_today, clinic_day_bounds_utc, clinic_now, clinic_tzinfo
+from core.clinic_time import clinic_today, clinic_day_bounds_utc, clinic_now, clinic_tzinfo, clinic_day_of
 from zoneinfo import ZoneInfo
 from schemas import (
     InvoiceOut, InvoiceLineItemCreate, InvoiceLineItemOut,
@@ -66,6 +66,144 @@ def _is_back_dated(clinic, payment) -> bool:
     return bool(payment.paid_on and rec and payment.paid_on < rec)
 
 
+# ── Back-dated invoices ──────────────────────────────────────────────────────
+# The invoice date IS created_at: the PDF, the list, the filters, the exports
+# and the daily register all read it, so moving it moves the bill everywhere at
+# once. What would otherwise be lost, the day it was actually typed in, lives in
+# the audit trail (a 'date_changed' row, whose own created_at is the real one).
+
+DATE_CHANGED = 'date_changed'
+
+
+def _parse_invoice_date(clinic, raw) -> datetime:
+    """The moment a bill is for, as naive UTC like every stored timestamp.
+
+    Takes a bare YYYY-MM-DD (the day, time left to us) or a full ISO timestamp
+    (the date-and-time editor, same as a case paper's). The future is refused
+    either way: a bill for a visit that has not happened is a quotation."""
+    s = str(raw or '').strip()
+    today = clinic_today(clinic)
+    if len(s) == 10:
+        try:
+            d = datetime.strptime(s, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invoice_date must be YYYY-MM-DD")
+        if d > today:
+            raise HTTPException(status_code=400, detail="An invoice can't be dated in the future")
+        if d == today:
+            return datetime.utcnow()
+        # Midday, not midnight: a stored instant at the day's edge is one
+        # timezone slip away from printing as the day before.
+        start_utc, _ = clinic_day_bounds_utc(clinic, d, d)
+        return start_utc + timedelta(hours=12)
+    try:
+        when = datetime.fromisoformat(s.replace('Z', '+00:00'))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invoice_date must be a date or an ISO timestamp")
+    if when.tzinfo is not None:
+        when = when.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+    # A few minutes of slack for a browser clock that runs ahead.
+    if when > datetime.utcnow() + timedelta(minutes=10):
+        raise HTTPException(status_code=400, detail="An invoice can't be dated in the future")
+    return when
+
+
+def _invoice_day(clinic, invoice):
+    return clinic_day_of(clinic, invoice.created_at) or clinic_today(clinic)
+
+
+def _latest_date_change(db: Session, invoice_id: int):
+    return (
+        db.query(InvoiceAuditLog)
+        .filter(InvoiceAuditLog.invoice_id == invoice_id, InvoiceAuditLog.action == DATE_CHANGED)
+        .order_by(desc(InvoiceAuditLog.id))
+        .first()
+    )
+
+
+def _move_invoice_register_entry(db: Session, clinic, invoice, old_day, new_day, user_id):
+    """Billing puts the patient in that day's register. When the bill moves to
+    another day, so does the visit it implied, but only an entry the bill made:
+    one reception typed in, a check-in, or one a case paper or a second bill
+    also accounts for stays exactly where it is."""
+    from models import DailyVisit
+    from domains.patient.routes.daily_register import record_daily_visit
+    patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+    if not patient or old_day == new_day:
+        return
+    old = db.query(DailyVisit).filter(
+        DailyVisit.clinic_id == clinic.id,
+        DailyVisit.patient_id == patient.id,
+        DailyVisit.visit_date == old_day,
+        DailyVisit.source == 'invoice',
+        DailyVisit.appointment_id.is_(None),
+    ).first()
+    if old:
+        start_utc, end_utc = clinic_day_bounds_utc(clinic, old_day, old_day)
+        other_bill = db.query(Invoice.id).filter(
+            Invoice.clinic_id == clinic.id,
+            Invoice.patient_id == patient.id,
+            Invoice.id != invoice.id,
+            Invoice.created_at >= start_utc,
+            Invoice.created_at < end_utc,
+        ).first()
+        if not other_bill:
+            db.delete(old)
+            db.flush()
+    record_daily_visit(db, clinic, patient, source='invoice', created_by=user_id, visit_date=new_day)
+
+
+def set_invoice_date(db: Session, invoice: Invoice, when: datetime, user_id, move_register: bool = True) -> bool:
+    """Re-date a draft to `when` (naive UTC). Returns False when nothing moved.
+    Does not commit."""
+    clinic = invoice.clinic or db.query(Clinic).filter(Clinic.id == invoice.clinic_id).first()
+    old_day = _invoice_day(clinic, invoice)
+    if invoice.created_at == when:
+        return False
+    invoice.created_at = when
+    new_day = clinic_day_of(clinic, when) or clinic_today(clinic)
+    if move_register:
+        try:
+            _move_invoice_register_entry(db, clinic, invoice, old_day, new_day, user_id)
+        except Exception as e:
+            print(f"⚠️ Could not move invoice {invoice.id} in the daily register: {e}")
+    today = clinic_today(clinic)
+    note = (f"Back-dated to {new_day.strftime('%d %b %Y')}, entered on {today.strftime('%d %b %Y')}"
+            if new_day < today else f"Dated {new_day.strftime('%d %b %Y')}")
+    create_audit_log(db, invoice.id, user_id, DATE_CHANGED,
+                     {'invoice_date': old_day.isoformat()},
+                     {'invoice_date': new_day.isoformat()}, note)
+    return True
+
+
+def _case_paper_moment(db: Session, clinic_id: int, case_paper_id):
+    """When the visit a case paper records happened, or None. A bill raised
+    from a case paper is for that visit, so it takes the paper's date and time
+    unless someone picks another."""
+    if not case_paper_id:
+        return None
+    from models import CasePaper
+    cp = db.query(CasePaper.date).filter(
+        CasePaper.id == case_paper_id, CasePaper.clinic_id == clinic_id,
+    ).first()
+    when = cp[0] if cp else None
+    if when is None or when > datetime.utcnow():
+        return None
+    return when
+
+
+def _is_back_dated_invoice(db: Session, invoice: Invoice) -> bool:
+    """Someone chose a day for this bill earlier than the day they chose it.
+    Asked of the audit trail, not of created_at alone: a case-paper draft that
+    sat open for a week is old, not back-dated, and must still issue today."""
+    log = _latest_date_change(db, invoice.id)
+    if not log or not log.created_at:
+        return False
+    chosen = (log.new_values or {}).get('invoice_date')
+    entered = clinic_day_of(invoice.clinic, log.created_at)
+    return bool(chosen and entered and chosen < entered.isoformat())
+
+
 def post_issue_discount_total(invoice: Invoice) -> float:
     """Sum of concessions granted after this invoice was issued (already resolved
     to currency at the time each was applied)."""
@@ -93,8 +231,9 @@ def _payment_order(p):
     return (day, p.created_at or datetime.min, p.id or 0)
 
 
-def enrich_invoice(db: Session, invoice: Invoice):
-    """Enrich invoice with related data"""
+def enrich_invoice(db: Session, invoice: Invoice, with_back_dated: bool = True):
+    """Enrich invoice with related data. `with_back_dated` costs one audit-log
+    query, so the list turns it off; only the open drawer shows it."""
     total_amount = float(invoice.total or 0)
     paid_amount = float(getattr(invoice, 'paid_amount', 0) or 0)
     due_amount = getattr(invoice, 'due_amount', None)
@@ -168,6 +307,8 @@ def enrich_invoice(db: Session, invoice: Invoice):
         'sync_status': getattr(invoice, 'sync_status', 'local'),
         'paid_at': invoice.paid_at.isoformat() if invoice.paid_at else None,
         'finalized_at': getattr(invoice, 'finalized_at', None).isoformat() if getattr(invoice, 'finalized_at', None) else None,
+        'invoice_date': (_invoice_day(invoice.clinic, invoice).isoformat() if invoice.created_at else None),
+        'back_dated': (_is_back_dated_invoice(db, invoice) if with_back_dated else False),
         'paid_amount': paid_amount,
         'due_amount': float(due_amount or 0),
         'line_items': [
@@ -383,6 +524,12 @@ def get_or_create_draft_invoice(db: Session, clinic_id: int, patient_id: int, ca
     )
     db.add(inv)
     db.flush()
+    # Procedures and stock land here from the case paper, so the bill is for
+    # the paper's visit. The paper already put the patient in that day's
+    # register, so there is nothing to move.
+    when = _case_paper_moment(db, clinic_id, case_paper_id)
+    if when is not None:
+        set_invoice_date(db, inv, when, created_by, move_register=False)
     return inv
 
 
@@ -500,6 +647,19 @@ async def create_invoice(
         
         create_audit_log(db, invoice.id, current_user.id, 'created')
 
+        # A bill raised after the visit. Validated before anything else is
+        # written, and set before the register below so the visit lands on the
+        # day it happened rather than the day it was typed.
+        bill_clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
+        if bill_clinic:
+            when = (_parse_invoice_date(bill_clinic, invoice_data.invoice_date)
+                    if invoice_data.invoice_date
+                    else _case_paper_moment(db, current_user.clinic_id, case_paper_id))
+            if when is not None:
+                # Nothing to move yet: the register entry is written below,
+                # already on this day.
+                set_invoice_date(db, invoice, when, current_user.id, move_register=False)
+
         # Lines sent with the invoice itself (see InvoiceCreate.line_items).
         for li in (invoice_data.line_items or []):
             qty = li.quantity or 1.0
@@ -519,9 +679,9 @@ async def create_invoice(
         # patient per day. Best-effort: never block raising a bill.
         try:
             from domains.patient.routes.daily_register import record_daily_visit
-            reg_clinic = db.query(Clinic).filter(Clinic.id == current_user.clinic_id).first()
-            if reg_clinic and patient:
-                record_daily_visit(db, reg_clinic, patient, source='invoice', created_by=current_user.id)
+            if bill_clinic and patient:
+                record_daily_visit(db, bill_clinic, patient, source='invoice', created_by=current_user.id,
+                                   visit_date=_invoice_day(bill_clinic, invoice))
         except Exception as e:
             print(f"⚠️ Could not add invoice {invoice.id} to the daily register: {e}")
 
@@ -1918,7 +2078,7 @@ async def get_invoices(
             created_from=created_from, created_to=created_to,
         )
         invoices = query.order_by(desc(Invoice.created_at)).offset(skip).limit(limit).all()
-        return [enrich_invoice(db, inv) for inv in invoices]
+        return [enrich_invoice(db, inv, with_back_dated=False) for inv in invoices]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching invoices: {str(e)}")
 
@@ -2076,6 +2236,7 @@ async def get_invoice_timeline(
         "line_item_deleted": "Item removed",
         "discount_removed": "Discount removed",
         "payment_deleted": "Payment removed",
+        DATE_CHANGED: "Invoice date changed",
     }
     BY_VERBS = {
         "created": "Raised by",
@@ -2086,6 +2247,7 @@ async def get_invoice_timeline(
         "line_item_deleted": "Removed by",
         "discount_removed": "Removed by",
         "payment_deleted": "Removed by",
+        DATE_CHANGED: "Changed by",
     }
 
     logs = db.query(InvoiceAuditLog).filter(
@@ -2643,7 +2805,11 @@ async def finalize_invoice(
 
         recalculate_invoice_totals(db, invoice)
         invoice.status = 'finalized'
-        invoice.finalized_at = datetime.utcnow()
+        # A back-dated bill is issued on its own date, or the revenue figures
+        # (which count by finalized_at first) would book it today. The real
+        # moment of issue is still the 'finalized' audit row's timestamp.
+        invoice.finalized_at = (invoice.created_at if _is_back_dated_invoice(db, invoice)
+                                else datetime.utcnow())
         invoice.paid_amount = 0.0
         invoice.due_amount = max(float(invoice.total or 0), 0.0)
 
@@ -2909,6 +3075,9 @@ async def update_invoice(
             invoice.applied_offer_id = invoice_update.get('applied_offer_id')
         elif 'discount' in invoice_update:
             invoice.applied_offer_id = None
+        if invoice_update.get('invoice_date'):
+            set_invoice_date(db, invoice, _parse_invoice_date(invoice.clinic, invoice_update['invoice_date']),
+                             current_user.id)
 
         recalculate_invoice_totals(db, invoice)
         
@@ -2921,8 +3090,9 @@ async def update_invoice(
             'tax_rate': invoice.tax_rate,
         }
         
-        # Audit log
-        create_audit_log(db, invoice_id, current_user.id, 'updated', old_values, new_values)
+        # Audit log. A date-only change already wrote its own, more specific row.
+        if set(invoice_update) - {'invoice_date'}:
+            create_audit_log(db, invoice_id, current_user.id, 'updated', old_values, new_values)
         
         db.commit()
         db.refresh(invoice)
