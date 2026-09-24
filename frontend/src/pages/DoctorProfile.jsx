@@ -3,7 +3,7 @@ import Spinner from '../components/common/Spinner';
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import GearLoader from "../components/GearLoader";
-import { api } from "../utils/api";
+import { api, getFriendlyErrorMessage } from "../utils/api";
 import { notify } from '../utils/notify';
 import { BadgeCheck, AlertTriangle } from "lucide-react";
 import { generateAvatarUrl } from "../utils/avatar";
@@ -159,19 +159,27 @@ const DoctorProfile = () => {
       notify.problem('Only PNG or JPG images are allowed');
       return;
     }
-    if (file.size > 512 * 1024) {
-      notify.problem('Signature image must be under 512KB');
+    // Matches the server's 1 MB cap. It used to stop at 512KB, which turned
+    // away most phone photos before the server ever saw them.
+    if (file.size > 1000 * 1000) {
+      notify.problem('Signature image must be under 1 MB');
       return;
     }
+    // Picking the same file again after a failure should retry, not do nothing.
+    e.target.value = '';
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      const base64 = ev.target.result;
-      setSignaturePreview(base64);
+      const previous = signaturePreview;
+      setSignaturePreview(ev.target.result);
       setSignatureUploading(true);
       try {
-        await api.patch('/auth/me/signature', { signature_url: base64 });
-      } catch {
-        notify.problem('Failed to save signature');
+        // Show what the server stored (trimmed to print size), not the upload.
+        const res = await api.patch('/auth/me/signature', { signature_url: ev.target.result });
+        setSignaturePreview(res?.signature_url || ev.target.result);
+      } catch (err) {
+        // A preview of an image that was never saved reads as "done".
+        setSignaturePreview(previous);
+        notify.problem(getFriendlyErrorMessage(err, 'Failed to save signature'));
       } finally {
         setSignatureUploading(false);
       }

@@ -550,19 +550,22 @@ class PrescriptionService:
             notes=prescription.notes or '',
         )
 
-        # Prescribing doctor (for Phase 5 signature embed). May be None.
+        # Prescribing doctor, whose name and signature the page carries: whoever
+        # wrote it, then the visit's doctor for old rows that never recorded a
+        # writer. The same order as the preview, which used to show the
+        # writer's signature while the PDF went to the appointment's doctor and
+        # printed a blank line whenever that doctor had not uploaded one.
         doctor = None
-        try:
-            appt = getattr(prescription, 'appointment', None)
-            if appt:
-                doctor = getattr(appt, 'doctor', None)
-        except Exception:
-            pass
-        # A prescription written from the patient file has no appointment, so it
-        # falls back to the doctor recorded as having written it.
-        if doctor is None and getattr(prescription, 'doctor_id', None):
+        if getattr(prescription, 'doctor_id', None):
             from models import User
             doctor = self.db.query(User).filter(User.id == prescription.doctor_id).first()
+        if doctor is None:
+            try:
+                appt = getattr(prescription, 'appointment', None)
+                if appt:
+                    doctor = getattr(appt, 'doctor', None)
+            except Exception:
+                pass
 
         patient = prescription.patient
         html_content = self.render_prescription_html(

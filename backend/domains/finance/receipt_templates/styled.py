@@ -20,8 +20,9 @@ WeasyPrint-safe CSS only.
 import datetime
 
 from domains.infrastructure.services.pdf_safety import (
-    safe_color, safe_signature_data_uri, safe_text,
+    safe_color, safe_text,
 )
+from domains.finance.signing_doctor import signing_doctor
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
 from domains.infrastructure.services.pdf_fields import (
     apply_letterhead, page_css, resolve_field_visibility, resolve_letterhead,
@@ -138,7 +139,7 @@ def _render_receipt(invoice, payment, clinic, config, style) -> str:
 
     signature = ''
     if vis.signature:
-        sig_uri = safe_signature_data_uri(getattr(payment, 'signature_url', None))
+        sig_uri = signing_doctor(invoice).signature
         img = (f'<img src="{sig_uri}" alt="" style="display:block;max-width:140px;max-height:44px;'
                f'margin-left:auto;margin-bottom:2px;object-fit:contain;">') if sig_uri else ''
         signature = (

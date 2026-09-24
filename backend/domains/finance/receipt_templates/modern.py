@@ -10,8 +10,9 @@ WeasyPrint-safe CSS only — no flexbox `gap`, no CSS grid, no JS, no `:has()`.
 import datetime
 
 from domains.infrastructure.services.pdf_safety import (
-    safe_color, safe_signature_data_uri, safe_text,
+    safe_color, safe_text,
 )
+from domains.finance.signing_doctor import signing_doctor
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
 from domains.infrastructure.services.pdf_fields import resolve_field_visibility
 from domains.finance.invoice_templates.classic import _amount_in_words
@@ -68,15 +69,7 @@ def render_receipt(invoice, payment, clinic, config=None) -> str:
     p_phone = safe_text(pat.phone if pat else '')
     p_uhid  = safe_text(getattr(pat, 'uhid', '') or (f'PT-{pat.id}' if pat else ''))
 
-    doctor_signature = ''
-    try:
-        appt = getattr(invoice, 'appointment', None)
-        if appt:
-            doc = getattr(appt, 'doctor', None) or getattr(appt, 'dentist', None)
-            if doc:
-                doctor_signature = safe_signature_data_uri(getattr(doc, 'signature_url', None))
-    except Exception:
-        pass
+    doctor_signature = signing_doctor(invoice).signature
 
     # ── The three figures, frozen at the moment the money was taken ──────────
     amount   = float(getattr(payment, 'amount', 0) or 0)

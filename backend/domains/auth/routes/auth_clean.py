@@ -939,8 +939,11 @@ async def update_signature(
 
     if img.format not in {"PNG", "JPEG"}:
         raise HTTPException(status_code=400, detail=f"unsupported format {img.format} — use PNG or JPEG")
-    if img.width > 1024 or img.height > 1024:
-        raise HTTPException(status_code=400, detail="signature dimensions exceed 1024px")
+    # Only a guard against decompression bombs. It used to refuse anything over
+    # 1024px, which is every phone photo of a signature, when the line below
+    # shrinks it to 400px anyway.
+    if img.width * img.height > 25_000_000:
+        raise HTTPException(status_code=400, detail="That image is too large. Try a smaller photo or a crop of the signature.")
 
     # Downscale to a print-appropriate size (signatures render at ~120-160 px in PDFs).
     if max(img.width, img.height) > 400:

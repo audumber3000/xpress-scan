@@ -18,9 +18,10 @@ import datetime
 from types import SimpleNamespace
 
 from domains.infrastructure.services.pdf_safety import (
-    safe_color, safe_signature_data_uri, safe_text,
+    safe_color, safe_text,
 )
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
+from domains.finance.signing_doctor import signing_doctor
 from domains.infrastructure.services.pdf_fields import (
     apply_letterhead, document_doctor_lines, resolve_field_visibility,
     resolve_letterhead,
@@ -90,17 +91,11 @@ def prepare(invoice, clinic, config=None, default_color: str = '#111827') -> Sim
     # Letters after the name, travelling with whichever doctor was resolved: the
     # clinic owner's MDS must not end up printed under a visiting associate.
     doctor_qualifications = safe_text(getattr(clinic, 'doctor_qualifications', '') or '')
-    try:
-        appt = getattr(invoice, 'appointment', None)
-        if appt:
-            doc = getattr(appt, 'doctor', None) or getattr(appt, 'dentist', None)
-            if doc:
-                doctor_name = safe_text(getattr(doc, 'name', '') or doctor_name)
-                doctor_signature = safe_signature_data_uri(getattr(doc, 'signature_url', None))
-                doctor_qualifications = safe_text(getattr(doc, 'qualifications', '') or '')
-    except Exception:
-        # A malformed relationship must not cost the clinic its invoice.
-        pass
+    signer = signing_doctor(invoice)
+    doctor_signature = signer.signature
+    if signer.doctor is not None:
+        doctor_name = signer.name or doctor_name
+        doctor_qualifications = signer.qualifications
 
     # Hidden last, so the lookup above still runs and the signature flag keeps
     # behaving independently of the name.

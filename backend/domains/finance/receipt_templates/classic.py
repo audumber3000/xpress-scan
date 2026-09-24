@@ -17,8 +17,9 @@ WeasyPrint-safe CSS only — no flexbox `gap`, no CSS grid, no JS, no `:has()`.
 import datetime
 
 from domains.infrastructure.services.pdf_safety import (
-    safe_color, safe_signature_data_uri, safe_text,
+    safe_color, safe_text,
 )
+from domains.finance.signing_doctor import signing_doctor
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
 from domains.infrastructure.services.pdf_fields import (
     resolve_document_doctors, resolve_field_visibility,
@@ -75,15 +76,10 @@ def render_receipt(invoice, payment, clinic, config=None) -> str:
 
     doctor_name = c_doctor
     doctor_signature = ''
-    try:
-        appt = getattr(invoice, 'appointment', None)
-        if appt:
-            doc = getattr(appt, 'doctor', None) or getattr(appt, 'dentist', None)
-            if doc:
-                doctor_name = safe_text(getattr(doc, 'name', '') or doctor_name)
-                doctor_signature = safe_signature_data_uri(getattr(doc, 'signature_url', None))
-    except Exception:
-        pass
+    signer = signing_doctor(invoice)
+    doctor_signature = signer.signature
+    if signer.doctor is not None:
+        doctor_name = signer.name or doctor_name
 
     # Who the letterhead names. Strictly additive: a clinic with no configured
     # panel keeps the single name it has always printed here, flags and all.
