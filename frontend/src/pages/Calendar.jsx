@@ -55,12 +55,15 @@ const Calendar = () => {
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [duplicatePatients, setDuplicatePatients] = useState([]);
   // Mobile only: show the mini-calendar + team filters rail (hidden by default so
-  // the schedule grid gets the full width). Ignored on desktop (md+).
+  // the schedule grid gets the full width). Ignored on desktop (lg+).
   const [showFilters, setShowFilters] = useState(false);
   // The day list beside the grid, and the grid's own density. Both persist:
   // they are a working preference, not a per-visit decision.
+  // Below lg the rail floats over the grid instead of sitting beside it, so it
+  // starts closed there and the tablet never overwrites the desktop preference.
+  const isWide = () => window.matchMedia('(min-width: 1024px)').matches;
   const [showDayRail, setShowDayRail] = useState(
-    () => localStorage.getItem('mp_calendar_day_rail') !== '0'
+    () => isWide() && localStorage.getItem('mp_calendar_day_rail') !== '0'
   );
   // The mini-calendar and team filters. Same treatment as the day list: a rail
   // you can fold away when the grid needs the width.
@@ -154,7 +157,7 @@ const Calendar = () => {
   const [showUnassigned, setShowUnassigned] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem('mp_calendar_day_rail', showDayRail ? '1' : '0');
+    if (isWide()) localStorage.setItem('mp_calendar_day_rail', showDayRail ? '1' : '0');
   }, [showDayRail]);
   useEffect(() => {
     localStorage.setItem('mp_calendar_side_panel', showSidePanel ? '1' : '0');
@@ -851,7 +854,7 @@ const Calendar = () => {
         </button>
 
         {/* Two-column layout: team members rail + calendar content */}
-        <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
+        <div className="relative flex gap-4 flex-1 min-h-0 overflow-hidden">
           <div className={`${showFilters ? '' : 'hidden'} ${showSidePanel ? 'lg:block' : 'lg:hidden'} w-full lg:w-auto lg:shrink-0 relative`}>
           {/* Fold it away from its own edge, the way the day list closes from
               its own. A control that lives on the thing it hides is easier to
@@ -888,7 +891,7 @@ const Calendar = () => {
           />
           </div>
 
-          <div className={`${showFilters ? 'hidden' : ''} md:block flex-1 min-w-0 overflow-y-auto`}>
+          <div className={`${showFilters ? 'hidden' : ''} lg:block flex-1 min-w-0 overflow-y-auto`}>
         {/* Calendar Content */}
         {loading ? (
           <div className="p-4 space-y-3">
@@ -989,6 +992,7 @@ const Calendar = () => {
           {/* The day as a worklist. Hidden on phones, where the grid already
               becomes a list and a second one would just repeat it. */}
           {showDayRail && !isPhone && (
+            <div className="absolute inset-y-0 right-0 z-20 flex max-w-full shadow-xl lg:static lg:z-auto lg:shadow-none lg:shrink-0">
             <TodayRail
               appointments={visibleAppointments}
               dayKey={dateKey(currentDate)}
@@ -1003,6 +1007,7 @@ const Calendar = () => {
               onApplyOutcome={applyOutcome}
               outcomeBusy={outcomeBusy}
             />
+            </div>
           )}
         </div>
 

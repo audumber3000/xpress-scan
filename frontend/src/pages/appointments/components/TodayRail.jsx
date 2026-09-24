@@ -99,12 +99,12 @@ const TodayRail = ({
   const showing = tab === 'open' && openCount > 0 ? 'open' : 'day';
 
   return (
-    <aside className="w-full lg:w-72 xl:w-80 lg:shrink-0 flex flex-col min-h-0 border border-gray-200 rounded-lg bg-white overflow-hidden">
+    <aside className="w-80 max-w-full lg:w-72 xl:w-80 shrink-0 flex flex-col min-h-0 border border-gray-200 rounded-lg bg-white overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-200">
         <div className="flex items-center gap-1.5">
           <button
             onClick={onCollapse}
-            className="p-1 -ml-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors hidden lg:block"
+            className="p-1 -ml-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
             aria-label="Hide the day list"
           >
             <ChevronRight size={15} />
