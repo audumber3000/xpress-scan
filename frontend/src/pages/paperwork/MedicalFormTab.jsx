@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Plus, Trash2, ChevronUp, ChevronDown, Pencil,
   ArrowLeft, Save, Send, FileCheck, Loader2, Heading, Asterisk,
@@ -12,6 +13,11 @@ import SignedMedicalForms from './SignedMedicalForms';
 import { TYPE_MAP, isLayout, keyFor } from './fieldTypes';
 import EmptyState from '../../components/common/EmptyState';
 import { noData } from '../../assets/illustrations';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
+import { formatDate } from '../../utils/datetime';
+import {
+  PaperworkTable, Thead, Th, Tbody, Tr, Td, NameCell, FullRow, StatusPill, RowButton, HeaderButton,
+} from './PaperworkTable';
 
 /**
  * The medical history a clinic sends its patients, and the editor for it.
@@ -25,7 +31,7 @@ import { noData } from '../../assets/illustrations';
  * one medical history — so the tab opens on the list and editing takes over the
  * pane rather than opening yet another surface on top of it.
  */
-const MedicalFormTab = () => {
+const MedicalFormTab = ({ actionsEl = null }) => {
   const [forms, setForms] = useState([]);
   const [starter, setStarter] = useState(null);
   const [mappable, setMappable] = useState({});
@@ -33,6 +39,7 @@ const MedicalFormTab = () => {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null);   // the form being built
+  const [confirmRemove, setConfirmRemove] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,100 +104,122 @@ const MedicalFormTab = () => {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-16 justify-center text-[13px] text-gray-500">
-        <Spinner className="w-4 h-4" /> Loading the medical form
-      </div>
-    );
-  }
+  // The tab's actions sit in the page header beside the other tabs' buttons.
+  // Hidden while the builder is open, which has its own Save and Back.
+  const headerActions = actionsEl && createPortal(
+    <>
+      {starter && forms.length === 0 && (
+        <HeaderButton onClick={adopt} disabled={busy === 'adopt'}>
+          {busy === 'adopt' ? <Spinner className="w-3.5 h-3.5" /> : <FileCheck size={16} />}
+          Use ready-made form
+        </HeaderButton>
+      )}
+      <HeaderButton primary onClick={blank}>
+        <Plus size={16} strokeWidth={2.5} /> Build medical form
+      </HeaderButton>
+    </>,
+    actionsEl,
+  );
+
+  const summary = (t) => {
+    const questions = (t.schema || []).filter((f) => !isLayout(f.type));
+    const sections = (t.schema || []).filter((f) => isLayout(f.type));
+    return `${questions.length} question${questions.length === 1 ? '' : 's'}`
+      + (sections.length ? ` · ${sections.length} section${sections.length === 1 ? '' : 's'}` : '');
+  };
+  const updates = (t) => {
+    const mapped = (t.schema || []).filter((f) => !isLayout(f.type) && f.maps_to);
+    return mapped.length
+      ? `Updates ${[...new Set(mapped.map((f) => mappable[f.maps_to] || f.maps_to))].join(', ')}`
+      : 'Sent to patients to fill in and sign on their phone';
+  };
 
   return (
     <div className="space-y-5 flex-1 min-h-0 overflow-y-auto pb-6">
+      {headerActions}
       {error && <InlineFeedback tone="error">{error}</InlineFeedback>}
 
-      <section className="rounded-xl border border-gray-200 bg-white">
-        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-sm font-bold text-gray-900">Your medical form</h2>
-            <p className="text-[12px] text-gray-500 mt-0.5">
-              Sent to a patient to fill in and sign on their phone. What comes back
-              is a signed PDF on their file, and answers staff can accept onto the chart.
-            </p>
-          </div>
-          <button onClick={blank}
-            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[13px] font-semibold hover:border-[#2a276e] hover:text-[#2a276e] transition-colors">
-            <Plus size={14} /> Build one
-          </button>
-        </div>
+      <PaperworkTable>
+        <Thead>
+          <Th>Form</Th>
+          <Th>Questions</Th>
+          <Th>Status</Th>
+          <Th>Updated</Th>
+          <Th align="right">Actions</Th>
+        </Thead>
+        <Tbody>
+          {loading ? (
+            <FullRow cols={5}>
+              <div className="flex items-center gap-2 justify-center text-sm text-gray-500">
+                <Spinner className="w-4 h-4" /> Loading the medical form
+              </div>
+            </FullRow>
+          ) : forms.length === 0 ? (
+            <FullRow cols={5}>
+              <EmptyState
+                image={noData}
+                title="No medical form yet"
+                subtitle="Start from the ready-made one. It asks what a practice actually asks: who the patient is, who pays, the condition list, and a declaration they sign. Every question is yours to change."
+              />
+              {starter && (
+                <div className="mt-4 flex justify-center">
+                  <HeaderButton primary onClick={adopt} disabled={busy === 'adopt'}>
+                    {busy === 'adopt' ? <Spinner className="w-3.5 h-3.5" /> : <Plus size={16} />}
+                    Use the ready-made form ({starter.field_count} questions)
+                  </HeaderButton>
+                </div>
+              )}
+            </FullRow>
+          ) : forms.map((t) => (
+            <Tr key={t.id}>
+              <NameCell title={t.name} sub={updates(t)} />
+              <Td className="whitespace-nowrap tabular-nums">{summary(t)}</Td>
+              <Td className="whitespace-nowrap">
+                <StatusPill active={t.is_active} inactiveLabel="Retired" />
+              </Td>
+              <Td className="whitespace-nowrap tabular-nums">
+                {t.updated_at ? formatDate(t.updated_at) : '—'}
+              </Td>
+              <Td align="right" className="whitespace-nowrap">
+                <div className="flex items-center justify-end gap-1.5">
+                  <RowButton onClick={() => setEditing(t)}><Pencil size={12} /> Edit questions</RowButton>
+                  <RowButton
+                    tone="danger"
+                    onClick={() => setConfirmRemove(t)}
+                    disabled={busy === `del-${t.id}`}
+                    title="Remove"
+                  >
+                    {busy === `del-${t.id}` ? <Spinner className="w-3 h-3" /> : <Trash2 size={12} />} Remove
+                  </RowButton>
+                </div>
+              </Td>
+            </Tr>
+          ))}
+        </Tbody>
+      </PaperworkTable>
 
-        {forms.length === 0 ? (
-          <div className="px-5 py-4 text-center">
-            <EmptyState
-              image={noData}
-              title="No medical form yet"
-              subtitle="Start from the ready-made one. It asks what a practice actually asks: who the patient is, who pays, the condition list, and a declaration they sign. Every question is yours to change."
-            />
-            {starter && (
-              <button onClick={adopt} disabled={busy === 'adopt'}
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2a276e] text-white text-[13px] font-semibold hover:bg-[#1a1548] disabled:opacity-50">
-                {busy === 'adopt' ? <Spinner className="w-3.5 h-3.5" /> : <Plus size={14} />}
-                Use the ready-made form ({starter.field_count} questions)
-              </button>
-            )}
-          </div>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {forms.map((t) => {
-              const questions = (t.schema || []).filter((f) => !isLayout(f.type));
-              const sections = (t.schema || []).filter((f) => isLayout(f.type));
-              return (
-                <li key={t.id} className="px-5 py-3.5 flex items-center gap-3 min-w-0">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
-                      {!t.is_active && (
-                        <span className="px-2 py-0.5 rounded text-[11px] font-semibold border border-gray-200 bg-gray-50 text-gray-500">
-                          Retired
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[12px] text-gray-500 mt-0.5">
-                      {questions.length} question{questions.length === 1 ? '' : 's'}
-                      {sections.length ? ` across ${sections.length} section${sections.length === 1 ? '' : 's'}` : ''}
-                      {questions.some((f) => f.maps_to)
-                        ? ` · updates ${[...new Set(questions.filter((f) => f.maps_to).map((f) => mappable[f.maps_to] || f.maps_to))].join(', ')}`
-                        : ''}
-                    </p>
-                  </div>
-                  <button onClick={() => setEditing(t)}
-                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[12px] font-semibold hover:border-[#2a276e] hover:text-[#2a276e]">
-                    <Pencil size={12} /> Edit questions
-                  </button>
-                  <button onClick={() => remove(t)} disabled={busy === `del-${t.id}`} title="Remove"
-                    className="shrink-0 p-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">
-                    {busy === `del-${t.id}` ? <Spinner className="w-3.5 h-3.5" /> : <Trash2 size={14} />}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="rounded-xl border border-gray-200 bg-white">
-        <div className="px-5 py-3.5 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+      <section>
+        <div className="flex items-baseline justify-between gap-3 mb-2">
+          <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
             <FileCheck size={15} className="text-[#29828a]" /> Signed and on file
           </h2>
-          <p className="text-[12px] text-gray-500 mt-0.5">
-            Every history a patient has completed and signed. Opens their file.
-          </p>
+          <p className="text-xs text-gray-500">Every history a patient has completed and signed.</p>
         </div>
-        <div className="p-4">
-          <SignedMedicalForms />
-        </div>
+        <SignedMedicalForms />
       </section>
+
+      <ConfirmDialog
+        open={!!confirmRemove}
+        onClose={() => setConfirmRemove(null)}
+        tone="danger"
+        title={`Remove ${confirmRemove?.name || 'this form'}?`}
+        message="If patients have already filled it in, it is retired instead, so their signed copies stay explained."
+        actions={[{
+          label: 'Remove form',
+          variant: 'danger',
+          onClick: () => { const t = confirmRemove; setConfirmRemove(null); remove(t); },
+        }]}
+      />
     </div>
   );
 };

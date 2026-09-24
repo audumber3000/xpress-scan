@@ -81,6 +81,8 @@ class FormTemplateResponseDTO(BaseModel):
     kind: Optional[str] = "questionnaire"
     schema: list = []
     is_active: bool = True
+    # Shown as "Updated" on the Paperwork table.
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

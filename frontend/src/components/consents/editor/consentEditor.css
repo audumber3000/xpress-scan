@@ -1,0 +1,47 @@
+/* The A4 page in the consent editor. Tailwind's reset strips list bullets,
+   heading sizes and table borders, so the page puts back what a document
+   needs. Kept close to consent_templates/classic.py so what you type is
+   what prints. */
+
+.consent-page .ProseMirror {
+  outline: none;
+  min-height: 60vh;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #1f2937;
+}
+.consent-page .ProseMirror > * + * { margin-top: 0.5em; }
+.consent-page .ProseMirror p { margin: 0 0 8px 0; }
+.consent-page .ProseMirror h1 { font-size: 17px; font-weight: 700; margin: 12px 0 8px; }
+.consent-page .ProseMirror h2 { font-size: 15px; font-weight: 700; margin: 12px 0 6px; }
+.consent-page .ProseMirror h3 { font-size: 13px; font-weight: 700; margin: 10px 0 6px; }
+.consent-page .ProseMirror ul { list-style: disc; padding-left: 22px; margin: 0 0 8px; }
+.consent-page .ProseMirror ol { list-style: decimal; padding-left: 22px; margin: 0 0 8px; }
+.consent-page .ProseMirror li p { margin: 0; }
+.consent-page .ProseMirror blockquote { border-left: 3px solid #ddd; padding-left: 12px; color: #555; }
+.consent-page .ProseMirror hr { border: 0; border-top: 1px solid #ddd; margin: 12px 0; }
+.consent-page .ProseMirror mark { border-radius: 2px; padding: 0 1px; }
+.consent-page .ProseMirror table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; table-layout: fixed; }
+.consent-page .ProseMirror th,
+.consent-page .ProseMirror td { border: 1px solid #ccc; padding: 5px 7px; vertical-align: top; position: relative; }
+.consent-page .ProseMirror th { background: #f8fafc; font-weight: 600; text-align: left; }
+.consent-page .ProseMirror .selectedCell::after {
+  content: ''; position: absolute; inset: 0; background: rgba(42, 39, 110, 0.08); pointer-events: none;
+}
+.consent-page .ProseMirror .column-resize-handle {
+  position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: #2a276e; pointer-events: none;
+}
+.consent-page .ProseMirror.resize-cursor { cursor: col-resize; }
+.consent-page .ProseMirror hr[data-page-break] {
+  border: 0; border-top: 2px dashed #c7c5e3; margin: 20px 0; position: relative; overflow: visible;
+}
+.consent-page .ProseMirror hr[data-page-break]::after {
+  content: 'Page break'; position: absolute; left: 50%; top: -9px; transform: translateX(-50%);
+  background: #fff; padding: 0 8px; font-size: 10px; color: #8b88c4; letter-spacing: 0.04em;
+}
+.consent-page .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder); color: #9ca3af; float: left; height: 0; pointer-events: none;
+}
+
+/* Read-only use on the patient's signing page: sized to its content. */
+.consent-page--read .ProseMirror { min-height: 0; font-size: 14px; }

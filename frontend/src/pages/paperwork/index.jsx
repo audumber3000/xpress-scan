@@ -6,15 +6,20 @@ import { useAuth } from "../../contexts/AuthContext";
 import { notify } from '../../utils/notify';
 import Card from "../../components/Card";
 import axios from "axios";
-import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, Eye, Download, FileCheck, HeartPulse } from 'lucide-react';
+import { Layout, Share2, CheckCircle, Clock, XCircle, Printer, ExternalLink, Search, FileCheck, HeartPulse, Plus, Languages, Star } from 'lucide-react';
 import ConsentRecentLinks from "../../components/consents/ConsentRecentLinks";
 import Pagination from "../../components/Pagination";
 import FilterDropdown from "../../components/FilterDropdown";
 import SignedConsents from '../../components/consents/SignedConsents';
 import MedicalFormTab from './MedicalFormTab';
+import ConsentTemplatesTable from './ConsentTemplatesTable';
+import ConsentLibraryDrawer from './ConsentLibraryDrawer';
+import { HeaderButton } from './PaperworkTable';
+import ConsentEditor from '../../components/consents/editor/ConsentEditor';
+import { CONSENT_LANGUAGES } from '../../components/consents/consentContent';
 import { generatePatientPersona, generateInitialsAvatar } from "../../utils/avatar";
 import EmptyState from "../../components/common/EmptyState";
-import { noData, medicalCare } from "../../assets/illustrations";
+import { noData } from "../../assets/illustrations";
 
 const CONSENT_PAGE_SIZE = 10;
 
@@ -37,11 +42,11 @@ const Paperwork = () => {
     const [activeTab, setActiveTab] = useState('templates');
     const [showModal, setShowModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
-    const [formData, setFormData] = useState({
-        name: "",
-        content: "",
-        is_active: true
-    });
+    const [showLibrary, setShowLibrary] = useState(false);
+    const [favoriteBusy, setFavoriteBusy] = useState(null);
+    // The medical tab portals its own header buttons into this slot, so both
+    // tabs keep their actions in the same place without lifting its state.
+    const [medicalActionsEl, setMedicalActionsEl] = useState(null);
     
     const [showSendModal, setShowSendModal] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -64,6 +69,8 @@ const Paperwork = () => {
     const [tableSearch, setTableSearch] = useState('');
     const [filterLinkStatus, setFilterLinkStatus] = useState('');
     const [filterTemplateStatus, setFilterTemplateStatus] = useState('');
+    const [filterLanguage, setFilterLanguage] = useState('');
+    const [favoritesOnly, setFavoritesOnly] = useState(false);
 
     const NEXUS_API_URL = import.meta.env.VITE_NEXUS_API_URL || `http://${window.location.hostname}:8001/api/v1`;
 
@@ -159,14 +166,36 @@ const Paperwork = () => {
     }, [sentLinks, tableSearch, filterLinkStatus]);
 
     const filteredTemplates = useMemo(() => {
+        const langCode = CONSENT_LANGUAGES.find(l => l.native === filterLanguage)?.code;
         return templates.filter(t => {
             const term = tableSearch.toLowerCase();
             if (term && !t.name?.toLowerCase().includes(term) && !t.content?.toLowerCase().includes(term)) return false;
             if (filterTemplateStatus === 'Active' && !t.is_active) return false;
             if (filterTemplateStatus === 'Draft' && t.is_active) return false;
+            if (langCode && (t.language || 'en') !== langCode) return false;
+            if (favoritesOnly && !t.is_favorite) return false;
             return true;
-        });
-    }, [templates, tableSearch, filterTemplateStatus]);
+        // Starred first; otherwise the order the server gave, which is creation order.
+        }).sort((a, b) => Number(!!b.is_favorite) - Number(!!a.is_favorite));
+    }, [templates, tableSearch, filterTemplateStatus, filterLanguage, favoritesOnly]);
+
+    const toggleFavorite = async (template) => {
+        const next = !template.is_favorite;
+        setFavoriteBusy(template.id);
+        setTemplates(prev => prev.map(t => (t.id === template.id ? { ...t, is_favorite: next } : t)));
+        try {
+            await api.patch(`/consents/templates/${template.id}/favorite`, { is_favorite: next });
+        } catch (error) {
+            setTemplates(prev => prev.map(t => (t.id === template.id ? { ...t, is_favorite: !next } : t)));
+            notify.problem(getPermissionAwareErrorMessage(
+                error,
+                "Couldn't update the star",
+                "You don't have permission to manage consent templates."
+            ));
+        } finally {
+            setFavoriteBusy(null);
+        }
+    };
 
     const openSignedConsent = (token) => {
         window.open(`${window.location.origin}/consent/sign/${token}`, '_blank', 'noopener,noreferrer');
@@ -234,25 +263,26 @@ const Paperwork = () => {
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    // Called by the full-screen editor. Throws so the editor stays open and
+    // shows the reason inline.
+    const saveTemplate = async (data) => {
         try {
             if (editingTemplate) {
-                await api.put(`/consents/templates/${editingTemplate.id}`, formData);
+                await api.put(`/consents/templates/${editingTemplate.id}`, data);
             } else {
-                await api.post("/consents/templates", { ...formData });
+                await api.post("/consents/templates", data);
             }
-            setShowModal(false);
-            setEditingTemplate(null);
-            setFormData({ name: "", content: "", is_active: true });
-            fetchTemplates();
         } catch (error) {
-            notify.problem(getPermissionAwareErrorMessage(
+            throw new Error(getPermissionAwareErrorMessage(
                 error,
-                "Failed to save template",
+                "Couldn't save the form",
                 "You don't have permission to manage consent templates."
             ));
         }
+        setShowModal(false);
+        setEditingTemplate(null);
+        notify.done(editingTemplate ? 'Form saved' : 'Form created');
+        fetchTemplates();
     };
 
     // Already searched clinic-wide by the server; filtering again here would put
@@ -285,36 +315,27 @@ const Paperwork = () => {
                             </button>
                         ))}
                     </div>
-                    <div className={`pb-3 gap-3 ${activeTab === 'medical' ? 'hidden' : 'flex'}`}>
-                        {activeTab === 'links' ? (
-                            <button
-                                onClick={fetchSentLinks}
-                                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 flex items-center gap-2 transition-colors"
-                            >
+                    <div className="pb-3 flex gap-3">
+                        {activeTab === 'links' && (
+                            <HeaderButton onClick={fetchSentLinks}>
                                 <svg className={`w-4 h-4 ${linksLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                                 Refresh
-                            </button>
-                        ) : (
-                            <button className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 flex items-center gap-2 transition-colors">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Export
-                            </button>
+                            </HeaderButton>
                         )}
-                        {activeTab !== 'links' && activeTab !== 'signed' && (
-                            <button
-                                onClick={() => { setEditingTemplate(null); setShowModal(true); }}
-                                className="bg-[#2a276e] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center gap-2"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
-                                </svg>
-                                Add New Template
-                            </button>
+                        {activeTab === 'templates' && (
+                            <>
+                                <HeaderButton onClick={() => setShowLibrary(true)}>
+                                    <Languages size={16} /> Browse library
+                                </HeaderButton>
+                                <HeaderButton primary onClick={() => { setEditingTemplate(null); setShowModal(true); }}>
+                                    <Plus size={16} strokeWidth={2.5} /> New consent form
+                                </HeaderButton>
+                            </>
                         )}
+                        {/* MedicalFormTab fills this slot with its own buttons. */}
+                        <div ref={setMedicalActionsEl} className={activeTab === 'medical' ? 'flex gap-3' : 'hidden'} />
                     </div>
                 </div>
 
@@ -328,7 +349,7 @@ const Paperwork = () => {
                         </div>
                         <input
                             type="text"
-                            placeholder={activeTab === 'links' ? 'Search links...' : 'Search templates...'}
+                            placeholder={activeTab === 'links' ? 'Search links...' : 'Search consent forms...'}
                             value={tableSearch}
                             onChange={(e) => { setTableSearch(e.target.value); setLinksPage(1); setTemplatesPage(1); }}
                             className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] transition-all"
@@ -342,17 +363,37 @@ const Paperwork = () => {
                             options={['Signed', 'Sent', 'Expired']}
                         />
                     ) : activeTab === 'templates' ? (
-                        <FilterDropdown
-                            label="Status"
-                            value={filterTemplateStatus}
-                            onChange={(v) => { setFilterTemplateStatus(v); setTemplatesPage(1); }}
-                            options={['Active', 'Draft']}
-                        />
+                        <>
+                            <FilterDropdown
+                                label="Status"
+                                value={filterTemplateStatus}
+                                onChange={(v) => { setFilterTemplateStatus(v); setTemplatesPage(1); }}
+                                options={['Active', 'Draft']}
+                            />
+                            <FilterDropdown
+                                label="Language"
+                                value={filterLanguage}
+                                onChange={(v) => { setFilterLanguage(v); setTemplatesPage(1); }}
+                                options={CONSENT_LANGUAGES.map(l => l.native)}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { setFavoritesOnly(v => !v); setTemplatesPage(1); }}
+                                aria-pressed={favoritesOnly}
+                                className={`px-3.5 py-2 rounded-lg border text-sm font-medium inline-flex items-center gap-1.5 transition-colors ${
+                                    favoritesOnly
+                                        ? 'border-[#2a276e] bg-[#2a276e]/5 text-[#2a276e]'
+                                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                }`}
+                            >
+                                <Star size={14} className={favoritesOnly ? 'fill-amber-400 text-amber-500' : ''} /> Favourites
+                            </button>
+                        </>
                     ) : null}
                 </div>
 
                 {activeTab === 'medical' ? (
-                    <MedicalFormTab />
+                    <MedicalFormTab actionsEl={medicalActionsEl} />
                 ) : loading ? (
                     <div className="flex justify-center items-center h-64">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2a276e]"></div>
@@ -464,116 +505,25 @@ const Paperwork = () => {
                         />
                     </div>
                 ) : activeTab === 'templates' ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 flex-1 min-h-0">
-                        {/* Main Templates Area - Table Format */}
-                        <div className="lg:col-span-2 xl:col-span-3 flex flex-col min-h-0">
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0">
-                                <div className="flex-1 overflow-x-auto overflow-y-auto">
-                                <table className="w-full divide-y divide-gray-200">
-                                    <thead className="bg-[#f8fafc] sticky top-0 z-10">
-                                        <tr>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Template Name</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Content Preview</th>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-100">
-                                        {templates.length === 0 ? (
-                                            <tr>
-                                                <td colSpan="4" className="px-6 py-12">
-                                                    <EmptyState
-                                                        image={medicalCare}
-                                                        title="No consent forms yet"
-                                                        subtitle="Build the ones you hand out most — extraction, root canal, implant — and you can send any of them to a patient in two taps."
-                                                    />
-                                                </td>
-                                            </tr>
-                                        ) : filteredTemplates.slice((templatesPage - 1) * CONSENT_PAGE_SIZE, templatesPage * CONSENT_PAGE_SIZE).map((template) => (
-                                            <tr key={template.id} className="hover:bg-indigo-50/30 transition-colors duration-150 group">
-                                                <td className="px-6 py-5">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-9 h-9 rounded-full bg-[#2a276e]/10 text-[#2a276e] flex items-center justify-center flex-shrink-0">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                            </svg>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-semibold text-gray-900">{template.name}</p>
-                                                            <p className="text-xs text-gray-400">Consent Form</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <p className="text-sm text-gray-500 line-clamp-2 max-w-md">
-                                                        {template.content || "Standard consent document..."}
-                                                    </p>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${template.is_active ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                                        <span className={`w-1.5 h-1.5 rounded-full ${template.is_active ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                                                        {template.is_active ? 'Active' : 'Draft'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        <button
-                                                            onClick={() => window.open(`/consent/preview/${template.id}`, '_blank')}
-                                                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-[#2a276e]/5 transition-colors"
-                                                            title="Preview on a printable page"
-                                                            aria-label="Preview"
-                                                        >
-                                                            <Eye size={16} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => window.open(`/consent/preview/${template.id}?print=1`, '_blank')}
-                                                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-[#2a276e]/5 transition-colors"
-                                                            title="Download / print (blank form)"
-                                                            aria-label="Download or print"
-                                                        >
-                                                            <Download size={16} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedTemplate(template);
-                                                                setShowSendModal(true);
-                                                            }}
-                                                            className="px-3 py-1.5 text-xs font-semibold text-[#2a276e] bg-[#2a276e]/5 rounded-lg hover:bg-[#2a276e]/10 transition-colors"
-                                                        >
-                                                            Send Link
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => {
-                                                                setEditingTemplate(template);
-                                                                setFormData({
-                                                                    name: template.name,
-                                                                    content: template.content,
-                                                                    is_active: template.is_active
-                                                                });
-                                                                setShowModal(true);
-                                                            }}
-                                                            className="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                </div>
-                                <Pagination
-                                    page={templatesPage}
-                                    pageSize={CONSENT_PAGE_SIZE}
-                                    totalItems={filteredTemplates.length}
-                                    onPageChange={setTemplatesPage}
-                                />
-                            </div>
+                    <div className="grid grid-cols-1 2xl:grid-cols-4 gap-6 flex-1 min-h-0">
+                        <div className="2xl:col-span-3 flex flex-col min-h-0">
+                            <ConsentTemplatesTable
+                                templates={filteredTemplates}
+                                totalCount={templates.length}
+                                page={templatesPage}
+                                pageSize={CONSENT_PAGE_SIZE}
+                                onPageChange={setTemplatesPage}
+                                onToggleFavorite={toggleFavorite}
+                                favoriteBusy={favoriteBusy}
+                                onSend={(template) => { setSelectedTemplate(template); setShowSendModal(true); }}
+                                onEdit={(template) => { setEditingTemplate(template); setShowModal(true); }}
+                            />
                         </div>
 
-                        {/* Sidebar: Recent Links matching "Inventory Alerts" */}
-                        <div className="lg:col-span-1 xl:col-span-1 h-full">
+                        {/* Live links, beside the table on wide screens only. Below
+                            that it squeezed the actions off the table, and the
+                            same links are one tab away under Sent links. */}
+                        <div className="hidden 2xl:block h-full">
                             <ConsentRecentLinks clinicId={user?.clinic_id} refreshKey={linksRefreshKey} />
                         </div>
                     </div>
@@ -753,88 +703,18 @@ const Paperwork = () => {
                 </div>
             )}
 
-            {/* Template Add/Edit Drawer */}
-            <div className={`fixed inset-0 z-50 flex justify-end ${showModal ? 'visible' : 'invisible'}`}>
-            <div
-                    className={`fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${showModal ? 'opacity-100' : 'opacity-0'}`}
-                    onClick={() => setShowModal(false)}
-                />
-                <div className={`relative z-10 w-full max-w-xl bg-white h-full shadow-2xl flex flex-col transition-transform duration-300 ${showModal ? 'translate-x-0' : 'translate-x-full'}`}>
-                    {/* Drawer Header */}
-                    <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between shrink-0">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-[#2a276e]/5 rounded-lg flex items-center justify-center text-[#2a276e]">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-bold text-gray-900">{editingTemplate ? 'Edit Template' : 'New Consent Template'}</h2>
-                                <p className="text-xs text-gray-500">Fill in the template details below</p>
-                            </div>
-                        </div>
-                        <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
+            <ConsentEditor
+                open={showModal}
+                template={editingTemplate}
+                onClose={() => { setShowModal(false); setEditingTemplate(null); }}
+                onSave={saveTemplate}
+            />
 
-                    {/* Drawer Form */}
-                    <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-5">
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Template Name</label>
-                            <input
-                                type="text"
-                                required
-                                placeholder="e.g. General Dental Treatment Consent"
-                                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] outline-none transition-all text-sm"
-                                value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            />
-                        </div>
-                        <div className="flex-1 flex flex-col">
-                            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Form Content</label>
-                            <textarea
-                                required
-                                rows={16}
-                                placeholder="Write the full legal text of the consent form here..."
-                                className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] outline-none transition-all resize-none text-sm leading-relaxed bg-gray-50/50"
-                                value={formData.content}
-                                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                            />
-                        </div>
-                        <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <input
-                                type="checkbox"
-                                id="is_active"
-                                className="w-4 h-4 accent-[#2a276e]"
-                                checked={formData.is_active}
-                                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                            />
-                            <label htmlFor="is_active" className="text-sm font-semibold text-gray-700">Make this template active immediately</label>
-                        </div>
-                    </form>
-
-                    {/* Drawer Footer */}
-                    <div className="px-6 py-5 border-t border-gray-100 bg-white shrink-0 flex gap-3">
-                        <button
-                            type="button"
-                            onClick={() => setShowModal(false)}
-                            className="flex-1 py-2.5 text-gray-600 font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors text-sm"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleSubmit}
-                            className="flex-[2] py-2.5 bg-[#2a276e] text-white rounded-lg font-semibold hover:bg-[#1a1548] transition-colors shadow-sm text-sm"
-                        >
-                            {editingTemplate ? 'Update Template' : 'Create Template'}
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <ConsentLibraryDrawer
+                open={showLibrary}
+                onClose={() => setShowLibrary(false)}
+                onAdded={fetchTemplates}
+            />
         </div>
     );
 };

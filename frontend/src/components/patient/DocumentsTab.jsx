@@ -181,10 +181,11 @@ const DocumentsTab = ({ patientId, patient, prescriptions = [], invoices = [], o
         api.get('/consents/templates').catch(() => []),
       ]);
       setDocs(all);
-      // Most-used first: a template list ordered by what the clinic actually
-      // reaches for beats one ordered by when it happened to be created.
+      // Starred first, then most-used: a list ordered by what the clinic
+      // actually reaches for beats one ordered by when it was created.
       setTemplates([...(Array.isArray(tpl) ? tpl : [])]
-        .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0)).slice(0, 4));
+        .sort((a, b) => (Number(!!b.is_favorite) - Number(!!a.is_favorite))
+          || ((b.usage_count || 0) - (a.usage_count || 0))).slice(0, 4));
     } catch (e) {
       notify.problem('Could not load this patient\'s documents.');
     } finally {

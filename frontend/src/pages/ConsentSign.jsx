@@ -6,6 +6,8 @@ import {
   CheckCircle2, AlertCircle, Loader2, ArrowLeft, FileText, ExternalLink, Check,
 } from "lucide-react";
 import { notify } from '../utils/notify';
+import { isHtmlContent, safeConsentHtml } from '../components/consents/consentContent';
+import '../components/consents/editor/consentEditor.css';
 
 /**
  * The consent a patient opens from a WhatsApp link on their phone.
@@ -235,9 +237,18 @@ const ConsentSign = () => {
                         document you must expand to read is one people agree to
                         without reading. */}
                     <div className="mt-3 max-h-[46vh] overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-3.5">
-                        <p className="text-[14px] leading-relaxed text-gray-700 whitespace-pre-wrap">
-                            {tokenData?.content}
-                        </p>
+                        {isHtmlContent(tokenData?.content) ? (
+                            /* Formatted in the editor: same styles as the editor's
+                               page, so headings, lists and tables read the same. */
+                            <div
+                                className="consent-page consent-page--read"
+                                dangerouslySetInnerHTML={{ __html: `<div class="ProseMirror">${safeConsentHtml(tokenData.content)}</div>` }}
+                            />
+                        ) : (
+                            <p className="text-[14px] leading-relaxed text-gray-700 whitespace-pre-wrap">
+                                {tokenData?.content}
+                            </p>
+                        )}
                     </div>
                 </div>
 
