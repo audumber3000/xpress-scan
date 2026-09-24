@@ -45,12 +45,18 @@ def list_templates(
     # One grouped count for the whole list, not one query per template. Lets the
     # documents tab rank templates by what the clinic actually uses instead of
     # showing them alphabetically forever.
+    #
+    # Counted by this clinic's own template ids, not patient_consents.clinic_id:
+    # nexus files signed consents without a clinic_id (it is only backfilled
+    # when the backend restarts), so filtering on it showed every form as
+    # never used.
+    template_ids = [t.id for t in templates]
     counts = dict(
         db.query(PatientConsent.template_id, func.count(PatientConsent.id))
-        .filter(PatientConsent.clinic_id == target_clinic_id)
+        .filter(PatientConsent.template_id.in_(template_ids))
         .group_by(PatientConsent.template_id)
         .all()
-    )
+    ) if template_ids else {}
     for t in templates:
         t.usage_count = counts.get(t.id, 0)
     return templates

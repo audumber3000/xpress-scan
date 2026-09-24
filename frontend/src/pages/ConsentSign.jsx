@@ -43,6 +43,10 @@ const ConsentSign = () => {
     const [branding, setBranding] = useState(null);
     const [error, setError] = useState(null);
     const [notice, setNotice] = useState('');
+    // The signature as it was when they pressed Review. The pad is unmounted
+    // while the preview shows, so submit cannot read it back from the canvas,
+    // and this is also the exact image the preview was rendered with.
+    const [reviewedSignature, setReviewedSignature] = useState(null);
     const [agreed, setAgreed] = useState(false);
     const [signed, setSigned] = useState(false);
     const [previewUrl, setPreviewUrl] = useState('');
@@ -99,6 +103,7 @@ const ConsentSign = () => {
         setPreviewing(true);
         try {
             const signature = sigPad.current.getCanvas().toDataURL("image/png");
+            setReviewedSignature(signature);
             const res = await axios.post(`${NEXUS_API_URL}/consent/preview/${token}`,
                 { signature }, { responseType: 'blob' });
             if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -112,10 +117,15 @@ const ConsentSign = () => {
     };
 
     const submit = async () => {
+        const signature = reviewedSignature
+            || (sigPad.current && !sigPad.current.isEmpty() ? sigPad.current.getCanvas().toDataURL("image/png") : null);
+        if (!signature) {
+            setNotice('Please sign in the box above.');
+            return;
+        }
         setSubmitting(true);
         setNotice('');
         try {
-            const signature = sigPad.current.getCanvas().toDataURL("image/png");
             await axios.post(`${NEXUS_API_URL}/consent/submit/${token}`, { signature });
             setDone(true);
         } catch (err) {
@@ -206,7 +216,7 @@ const ConsentSign = () => {
                 <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-gray-200">
                     <div className="max-w-xl mx-auto px-5 py-3.5 flex gap-2.5">
                         <button type="button" disabled={submitting}
-                                onClick={() => { URL.revokeObjectURL(previewUrl); setPreviewUrl(''); }}
+                                onClick={() => { URL.revokeObjectURL(previewUrl); setPreviewUrl(''); setReviewedSignature(null); setSigned(false); }}
                                 className="rounded-xl border border-gray-300 px-4 py-3.5 text-[15px] font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-60 inline-flex items-center gap-2">
                             <ArrowLeft size={16} /> Change something
                         </button>

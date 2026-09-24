@@ -70,3 +70,13 @@ def test_link_rejects_unknown_template_and_patient(client, auth_headers, test_pa
 
 def test_link_requires_auth(client):
     assert client.post("/api/v1/consents/links", json={"template_id": 1, "patient_id": 1}).status_code in (401, 403)
+
+
+def test_usage_count_includes_consents_filed_without_clinic_id(client, auth_headers, test_patient, db_session):
+    """nexus writes patient_consents with clinic_id NULL; they still count."""
+    from models import PatientConsent
+    t = _template(client, auth_headers)
+    db_session.add(PatientConsent(patient_id=test_patient.id, template_id=t["id"], clinic_id=None))
+    db_session.commit()
+    rows = client.get("/api/v1/consents/templates", headers=auth_headers).json()
+    assert next(r for r in rows if r["id"] == t["id"])["usage_count"] == 1
