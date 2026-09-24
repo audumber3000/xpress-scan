@@ -20,6 +20,7 @@ import { useAuth } from '../../../../app/AuthContext';
 import { styles } from './sharedStyles';
 import { SwipeableRow } from './SwipeableRow';
 import { getInitials } from './helpers';
+import { isFormattedConsent, consentPlainText, consentLanguageLabel } from './consentText';
 
 const WEB_BASE_URL = 'https://www.molarplus.com';
 
@@ -182,7 +183,14 @@ export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
           {templates.length === 0 ? <EmptyState /> : templates.map((t, index) => (
             <View key={t.id}>
               <SwipeableRow
-                onEdit={() => { setEditForm({ name: t.name, content: t.content }); setEditTemplate(t); }}
+                onEdit={() => {
+                  // Formatted on the web; a plain text box would show its HTML.
+                  if (isFormattedConsent(t.content)) {
+                    showAlert('Edit on desktop', 'This form has formatting (headings, lists or tables). Open MolarPlus on a computer to edit it. You can still send it from here.');
+                    return;
+                  }
+                  setEditForm({ name: t.name, content: t.content }); setEditTemplate(t);
+                }}
                 onDelete={() => handleDelete(t.id)}
               >
                 <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => setActionTemplate(t)}>
@@ -194,7 +202,10 @@ export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
                   </View>
                   <View style={styles.rowInfo}>
                     <Text style={styles.rowTitle}>{t.name}</Text>
-                    <Text style={styles.rowSubtitle} numberOfLines={1}>{t.content}</Text>
+                    <Text style={styles.rowSubtitle} numberOfLines={1}>
+                      {consentLanguageLabel(t.language) ? `${consentLanguageLabel(t.language)} · ` : ''}
+                      {consentPlainText(t.content)}
+                    </Text>
                   </View>
                   <TouchableOpacity
                     style={localStyles.sendBtn}
@@ -236,7 +247,7 @@ export const ConsentFormsTab = forwardRef<UtilityTabHandle>((_props, ref) => {
             </View>
             <Text style={styles.actionSheetSectionLabel}>Content</Text>
             <ScrollView style={{ maxHeight: 180, paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
-              <Text style={styles.consentFullText}>{actionTemplate?.content}</Text>
+              <Text style={styles.consentFullText}>{consentPlainText(actionTemplate?.content)}</Text>
               <View style={{ height: 8 }} />
             </ScrollView>
             <View style={styles.consentTrayActions}>

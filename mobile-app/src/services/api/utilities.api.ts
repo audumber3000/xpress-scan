@@ -61,7 +61,10 @@ export interface InventoryItemCreate {
 export interface ConsentTemplate {
   id: number;
   name: string;
+  /** Plain text, or HTML when written in the web editor (see consentText.ts). */
   content: string;
+  language?: string | null;
+  is_favorite?: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
