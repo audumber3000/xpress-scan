@@ -41,8 +41,8 @@ export const Tr = ({ children, className = '' }) => (
   <tr className={`hover:bg-indigo-50/30 transition-colors duration-150 ${className}`}>{children}</tr>
 );
 
-export const Td = ({ children, align = 'left', className = '' }) => (
-  <td className={`px-5 py-3.5 text-sm text-gray-600 text-${align} ${className}`}>{children}</td>
+export const Td = ({ children, align = 'left', className = '', ...rest }) => (
+  <td className={`px-5 py-3.5 text-sm text-gray-600 text-${align} ${className}`} {...rest}>{children}</td>
 );
 
 /** Row title plus a quiet second line, the first cell of every row. */

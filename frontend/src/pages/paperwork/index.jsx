@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import WhatsAppIcon from '../../components/common/WhatsAppIcon';
 import { api, getPermissionAwareErrorMessage } from "../../utils/api";
 import { useHeader } from "../../contexts/HeaderContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -14,6 +13,7 @@ import SignedConsents from '../../components/consents/SignedConsents';
 import MedicalFormTab from './MedicalFormTab';
 import ConsentTemplatesTable from './ConsentTemplatesTable';
 import ConsentLibraryDrawer from './ConsentLibraryDrawer';
+import SendConsentDrawer from './SendConsentDrawer';
 import { HeaderButton } from './PaperworkTable';
 import ConsentEditor from '../../components/consents/editor/ConsentEditor';
 import { CONSENT_LANGUAGES } from '../../components/consents/consentContent';
@@ -48,15 +48,8 @@ const Paperwork = () => {
     // tabs keep their actions in the same place without lifting its state.
     const [medicalActionsEl, setMedicalActionsEl] = useState(null);
     
-    const [showSendModal, setShowSendModal] = useState(false);
-    const [selectedTemplate, setSelectedTemplate] = useState(null);
-    const [patients, setPatients] = useState([]);
-    const [patientSearch, setPatientSearch] = useState("");
-    const [sending, setSending] = useState(false);
-    const [generatedLink, setGeneratedLink] = useState("");
-    const [generatedToken, setGeneratedToken] = useState("");
-    const [selectedPatient, setSelectedPatient] = useState(null);
-    const [messageSent, setMessageSent] = useState(false);
+    // The form being sent; the drawer owns everything else about sending.
+    const [sendingTemplate, setSendingTemplate] = useState(null);
     const [linksRefreshKey, setLinksRefreshKey] = useState(0);
 
     // Sent Links tab — full history of consent links generated for this clinic
@@ -81,13 +74,6 @@ const Paperwork = () => {
         // once on mount — calling it here too would double the request.
     }, []);
 
-    // Debounced so typing a name is one request, not one per keystroke.
-    useEffect(() => {
-        const t = setTimeout(() => fetchPatients(patientSearch), 300);
-        return () => clearTimeout(t);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [patientSearch]);
-
     const fetchTemplates = async () => {
         setLoading(true);
         try {
@@ -101,24 +87,6 @@ const Paperwork = () => {
             ));
         } finally {
             setLoading(false);
-        }
-    };
-
-    // Searched on the server. This used to pull /patients/ unpaged and filter in
-    // JS, but the endpoint returns 100 rows by default — so on a clinic larger
-    // than that, patients past the first hundred could never be picked, and the
-    // picker just said no match.
-    const fetchPatients = async (term = '') => {
-        try {
-            const q = (term || '').trim();
-            const data = await api.get("/patients/", {
-                // 2+ chars to search, per the endpoint; below that it's page one.
-                params: { skip: 0, limit: 10, ...(q.length >= 2 ? { search: q } : {}) },
-            });
-            setPatients(data || []);
-        } catch (error) {
-            console.error("Failed to fetch patients");
-            setPatients([]);
         }
     };
 
@@ -210,59 +178,6 @@ const Paperwork = () => {
         }
     };
 
-    const handleGenerateLink = async (patient) => {
-        if (!selectedTemplate) return;
-        
-        setSending(true);
-        try {
-            if (!user) {
-                notify.problem("User session not found");
-                return;
-            }
-            
-            const res = await axios.post(`${NEXUS_API_URL}/consent/generate`, {
-                patientId: patient.id,
-                patientName: patient.name,
-                phone: patient.phone,
-                templateId: selectedTemplate.id,
-                templateName: selectedTemplate.name,
-                content: selectedTemplate.content,
-                clinicId: user.clinic_id,
-            });
-
-            setGeneratedLink(res.data.signUrl);
-            setGeneratedToken(res.data.token);
-            setSelectedPatient(patient);
-            setLinksRefreshKey(k => k + 1); // Trigger sidebar refresh
-            notify.done("Link generated successfully");
-        } catch (error) {
-            notify.problem(error.response?.data?.error || "Failed to generate link");
-        } finally {
-            setSending(false);
-        }
-    };
-
-    const handleSendWhatsApp = async () => {
-        if (!selectedPatient || !generatedToken) return;
-
-        setSending(true);
-        try {
-            const fullLink = `${window.location.origin}${generatedLink}`;
-            // Through the backend rather than straight to nexus, so the link goes
-            // out from the clinic's own number when one is connected.
-            await api.post(`/consents/links/${generatedToken}/send-whatsapp`, {
-                consentLink: fullLink,
-            });
-
-            setMessageSent(true);
-            notify.done(`Consent link sent to ${selectedPatient.name} via WhatsApp`);
-        } catch (error) {
-            notify.problem(error, "Could not send that WhatsApp message");
-        } finally {
-            setSending(false);
-        }
-    };
-
     // Called by the full-screen editor. Throws so the editor stays open and
     // shows the reason inline.
     const saveTemplate = async (data) => {
@@ -284,10 +199,6 @@ const Paperwork = () => {
         notify.done(editingTemplate ? 'Form saved' : 'Form created');
         fetchTemplates();
     };
-
-    // Already searched clinic-wide by the server; filtering again here would put
-    // the 100-row ceiling straight back.
-    const filteredPatients = patients.slice(0, 5);
 
     return (
         <div className="flex flex-col h-screen p-8 max-w-[1600px] mx-auto bg-gray-50/50 overflow-hidden">
@@ -515,7 +426,7 @@ const Paperwork = () => {
                                 onPageChange={setTemplatesPage}
                                 onToggleFavorite={toggleFavorite}
                                 favoriteBusy={favoriteBusy}
-                                onSend={(template) => { setSelectedTemplate(template); setShowSendModal(true); }}
+                                onSend={setSendingTemplate}
                                 onEdit={(template) => { setEditingTemplate(template); setShowModal(true); }}
                             />
                         </div>
@@ -530,178 +441,11 @@ const Paperwork = () => {
                 ) : null}
             </>
 
-            {showSendModal && (
-                <div className="fixed inset-0 z-50 flex justify-end">
-                    <div 
-                        className="fixed inset-0 bg-[#1F1c4f]/20 backdrop-blur-sm transition-opacity" 
-                        onClick={() => { setShowSendModal(false); setGeneratedLink(""); setGeneratedToken(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }}
-                    ></div>
-                    <div className="bg-white w-full max-w-md relative z-10 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-                        
-                        {/* Drawer Header */}
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white shrink-0">
-                            <div>
-                                <h3 className="text-xl font-bold text-gray-900">Send Consent</h3>
-                                <p className="text-sm text-gray-500 mt-1">Select patient and generate link</p>
-                            </div>
-                            <button 
-                                onClick={() => { setShowSendModal(false); setGeneratedLink(""); setGeneratedToken(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }} 
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600"
-                            >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        {/* Selected Template Badge */}
-                        <div className="px-6 py-4 bg-[#2a276e]/5 border-b border-gray-200 flex items-start gap-3 shrink-0">
-                            <div className="p-2 bg-white rounded-lg text-[#2a276e] shadow-sm border border-gray-200">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p className="text-xs font-medium text-gray-500 mb-0.5">Selected Document</p>
-                                <h4 className="font-semibold text-gray-900">{selectedTemplate?.name}</h4>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto px-6 py-8">
-                            {generatedLink ? (
-                                <div className="text-center space-y-6">
-                                    <div className={`w-16 h-16 ${messageSent ? 'bg-green-50 text-green-500' : 'bg-[#2a276e]/5 text-[#2a276e]'} rounded-lg flex items-center justify-center mx-auto transition-colors`}>
-                                        {messageSent ? (
-                                            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        ) : (
-                                            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                            </svg>
-                                        )}
-                                    </div>
-                                    
-                                    <div>
-                                        <h3 className="text-xl font-bold text-gray-900">{messageSent ? 'Sent Successfully!' : 'Link Ready'}</h3>
-                                        <p className="text-gray-500 text-sm mt-2 leading-relaxed">
-                                            {messageSent 
-                                                ? `The digital consent link has been dispatched to ${selectedPatient?.name}'s WhatsApp.` 
-                                                : `A secure, one-time link has been generated to collect ${selectedPatient?.name}'s signature.`}
-                                        </p>
-                                    </div>
-
-                                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col gap-2 mt-8 text-left">
-                                        <p className="text-xs font-medium text-gray-600">Shareable Link (Valid for 5 mins)</p>
-                                        <div className="flex gap-2">
-                                            <input 
-                                                readOnly 
-                                                value={generatedLink}
-                                                className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-2 text-xs truncate outline-none font-mono text-gray-600"
-                                            />
-                                            <button 
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(generatedLink);
-                                                    notify.done("Link copied to clipboard!");
-                                                }}
-                                                className="bg-[#2a276e] text-white p-2.5 rounded-lg hover:bg-[#1a1548] transition-colors"
-                                                title="Copy Link"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {!messageSent && (
-                                        <button
-                                            onClick={handleSendWhatsApp}
-                                            disabled={sending}
-                                            className="w-full py-3 mt-6 bg-[#25D366] text-white rounded-lg font-semibold hover:bg-[#20bd5a] transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
-                                        >
-                                            {sending ? (
-                                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                            ) : (
-                                                <WhatsAppIcon size={20} />
-                                            )}
-                                            {sending ? 'Dispatching...' : 'Dispatch via WhatsApp'}
-                                        </button>
-                                    )}
-
-                                    <div className="pt-4">
-                                        <button
-                                            onClick={() => { setShowSendModal(false); setGeneratedLink(""); setGeneratedToken(""); setPatientSearch(""); setSelectedPatient(null); setMessageSent(false); }}
-                                            className="text-gray-500 font-semibold text-sm hover:text-gray-700 transition-colors"
-                                        >
-                                            {messageSent ? 'Finish & Close' : 'Close without sending'}
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            placeholder="Search patient by name or phone..."
-                                            className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-[#2a276e]/20 focus:border-[#2a276e] outline-none transition-all"
-                                            value={patientSearch}
-                                            onChange={(e) => setPatientSearch(e.target.value)}
-                                            autoFocus
-                                        />
-                                        <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                        </svg>
-                                    </div>
-
-                                    <div>
-                                        <p className="text-xs font-medium text-gray-500 mb-4">
-                                            {patientSearch ? "Search Results" : "Recent Patients"}
-                                        </p>
-                                        <div className="flex flex-col gap-3 min-h-[300px]">
-                                            {filteredPatients.map(patient => (
-                                                <button
-                                                    key={patient.id}
-                                                    onClick={() => handleGenerateLink(patient)}
-                                                    disabled={sending}
-                                                    className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-slate-50 transition-all text-left group bg-white shadow-sm"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0">
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                                            </svg>
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-bold text-[#1F1c4f] group-hover:text-indigo-600 transition-colors">{patient.name}</p>
-                                                            <p className="text-xs text-gray-500 font-medium">{patient.phone}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="p-2 text-gray-300 group-hover:text-indigo-600 transition-colors">
-                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                                                        </svg>
-                                                    </div>
-                                                </button>
-                                            ))}
-                                            {patientSearch && filteredPatients.length === 0 && (
-                                                <div className="py-12 flex flex-col items-center justify-center text-center">
-                                                    <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mb-3">
-                                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                                        </svg>
-                                                    </div>
-                                                    <p className="text-gray-500 font-medium">No matches for "{patientSearch}"</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+            <SendConsentDrawer
+                template={sendingTemplate}
+                onClose={() => setSendingTemplate(null)}
+                onLinkCreated={() => setLinksRefreshKey(k => k + 1)}
+            />
 
             <ConsentEditor
                 open={showModal}

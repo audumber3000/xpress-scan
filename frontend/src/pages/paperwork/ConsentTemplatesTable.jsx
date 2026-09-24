@@ -36,10 +36,10 @@ const ConsentTemplatesTable = ({
         <Th className="w-12"><span className="sr-only">Favourite</span></Th>
         <Th>Form</Th>
         <Th>Language</Th>
-        {/* Wide screens only: beside the links sidebar they pushed the
-            actions off the edge. */}
+        {/* Preview only on wide screens: beside the links sidebar it pushed
+            the actions off the edge. Used always shows. */}
         <Th className="hidden 2xl:table-cell">Preview</Th>
-        <Th className="hidden 2xl:table-cell">Used</Th>
+        <Th>Used</Th>
         <Th>Status</Th>
         <Th align="right">Actions</Th>
       </Thead>
@@ -83,7 +83,11 @@ const ConsentTemplatesTable = ({
             <Td className="hidden 2xl:table-cell">
               <p className="text-sm text-gray-500 line-clamp-2 max-w-sm">{previewText(t.content)}</p>
             </Td>
-            <Td className="hidden 2xl:table-cell whitespace-nowrap tabular-nums">{t.usage_count ? `${t.usage_count}×` : '—'}</Td>
+            <Td className="whitespace-nowrap tabular-nums" title={t.usage_count ? `Signed ${t.usage_count} time${t.usage_count === 1 ? '' : 's'}` : 'Not signed yet'}>
+              {t.usage_count
+                ? <span className="font-semibold text-gray-800">{t.usage_count}×</span>
+                : <span className="text-gray-300">0×</span>}
+            </Td>
             <Td className="whitespace-nowrap"><StatusPill active={t.is_active} /></Td>
             <Td align="right" className="whitespace-nowrap">
               <div className="flex items-center justify-end gap-1.5">

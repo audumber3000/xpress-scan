@@ -383,6 +383,72 @@ async def list_patient_consents(
     return result
 
 
+# ── Creating a consent link ───────────────────────────────────────────────────
+
+class ConsentLinkCreateRequest(BaseModel):
+    template_id: int
+    patient_id: int
+
+
+@router.post("/links")
+async def create_consent_link(
+    payload: ConsentLinkCreateRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Make a signing link for one patient and one form.
+
+    The browser used to build this request for nexus itself, which meant the
+    wording, the clinic and the patient's phone all came from the page. A
+    patient with no phone number on file failed nexus validation and the page
+    could only say "Failed to generate link". Built here from the database
+    instead: the form and patient must belong to the caller's clinic, the
+    wording is the stored copy, and a missing phone just means the link has to
+    be shared by hand rather than sent on WhatsApp.
+    """
+    import os
+    import httpx
+
+    if not current_user.clinic_id:
+        raise HTTPException(status_code=400, detail="No clinic associated with your account")
+    template = db.query(ConsentTemplate).filter(
+        ConsentTemplate.id == payload.template_id,
+        ConsentTemplate.clinic_id == current_user.clinic_id,
+    ).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="That consent form no longer exists")
+    patient = db.query(Patient).filter(
+        Patient.id == payload.patient_id,
+        Patient.clinic_id == current_user.clinic_id,
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    nexus = os.getenv("NEXUS_SERVICES_URL", "http://localhost:8001").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{nexus}/api/v1/consent/generate", json={
+                "patientId": patient.id,
+                "patientName": patient.name or "Patient",
+                "phone": patient.phone or "",
+                "templateId": template.id,
+                "templateName": template.name,
+                "content": template.content,
+                "clinicId": current_user.clinic_id,
+            })
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Could not reach the signing service. Please try again.")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Could not create the link. Please try again.")
+    data = resp.json() or {}
+    return {
+        "token": data.get("token"),
+        "sign_url": data.get("signUrl"),
+        "expires_in": data.get("expires_in", 300),
+        "patient": {"id": patient.id, "name": patient.name, "phone": patient.phone or ""},
+    }
+
+
 # ── Sending a consent link on WhatsApp ────────────────────────────────────────
 
 class ConsentLinkWhatsAppRequest(BaseModel):
