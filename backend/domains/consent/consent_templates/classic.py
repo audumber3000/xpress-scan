@@ -14,6 +14,7 @@ from domains.infrastructure.services.pdf_safety import (
     safe_color, safe_signature_data_uri, safe_text,
 )
 from domains.infrastructure.services.pdf_branding import resolve_logo_data_uri
+from domains.consent.rich_content import is_html, sanitize
 from domains.infrastructure.services.pdf_fields import (
     apply_letterhead, document_doctor_lines, page_css, resolve_field_visibility,
     resolve_letterhead,
@@ -118,11 +119,33 @@ def render_consent(clinic, patient_name, patient_id, template_name,
             )
 
     # ── Content paragraphs ──────────────────────────────────────────────────
-    content_paragraphs = ''
-    for line in (content or '').split('\n'):
-        stripped = line.strip()
-        if stripped:
-            content_paragraphs += f'<p>{safe_text(stripped)}</p>\n'
+    # Wording from the formatted editor is HTML: re-sanitised here, whatever
+    # was stored, since it can arrive as a snapshot through Nexus. Plain text
+    # takes the original path exactly, so existing forms print as they did.
+    rich = is_html(content)
+    rich_css = ''
+    if rich:
+        content_paragraphs = f'<div class="rich">{sanitize(content)}</div>\n'
+        rich_css = (
+            '.rich h1 { font-size: 17px; margin: 12px 0 8px 0; }'
+            ' .rich h2 { font-size: 15px; margin: 12px 0 6px 0; }'
+            ' .rich h3, .rich h4 { font-size: 13px; margin: 10px 0 6px 0; }'
+            ' .rich ul, .rich ol { margin: 0 0 8px 0; padding-left: 22px; }'
+            ' .rich li { margin-bottom: 3px; line-height: 1.6; }'
+            ' .rich li p { margin: 0; }'
+            ' .rich table { width: 100%; border-collapse: collapse; margin: 8px 0 12px 0; }'
+            ' .rich th, .rich td { border: 1px solid #ccc; padding: 5px 7px; font-size: 12px; vertical-align: top; }'
+            ' .rich th { background: #f8fafc; text-align: left; }'
+            ' .rich blockquote { margin: 0 0 8px 0; padding-left: 12px; border-left: 3px solid #ddd; color: #555; }'
+            ' .rich hr { border: 0; border-top: 1px solid #ddd; margin: 12px 0; }'
+            ' .rich [data-page-break] { page-break-after: always; break-after: page; border: 0; margin: 0; }'
+        )
+    else:
+        content_paragraphs = ''
+        for line in (content or '').split('\n'):
+            stripped = line.strip()
+            if stripped:
+                content_paragraphs += f'<p>{safe_text(stripped)}</p>\n'
 
     footer_text_html = (
         f'<div style="text-align:center;color:#888;font-size:10px;margin-top:16px;'
@@ -143,7 +166,7 @@ def render_consent(clinic, patient_name, patient_id, template_name,
   --table-header-bg: #f8fafc;
   --highlight-bg: #f0f4f8;
 }}
-{page_rule}{letterhead_css}
+{page_rule}{letterhead_css}{rich_css}
 body {{
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color: var(--text-main);

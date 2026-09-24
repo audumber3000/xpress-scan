@@ -248,6 +248,10 @@ async def lifespan(app: FastAPI):
                 "WHERE pc.patient_id = p.id AND pc.clinic_id IS NULL",
                 "CREATE INDEX IF NOT EXISTS ix_patient_consents_clinic ON patient_consents (clinic_id)",
                 "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS category VARCHAR",
+                # Consent language library + favourites (2026-09-24). Existing
+                # rows are English and unstarred, which is what they were.
+                "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS language VARCHAR(8) DEFAULT 'en'",
+                "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE",
                 "CREATE TABLE IF NOT EXISTS medication_groups (id SERIAL PRIMARY KEY, clinic_id INTEGER NOT NULL REFERENCES clinics(id), name VARCHAR NOT NULL, description VARCHAR, treatment_type_id INTEGER REFERENCES treatment_types(id), audience VARCHAR, is_active BOOLEAN DEFAULT TRUE, created_by INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())",
                 "CREATE TABLE IF NOT EXISTS medication_group_items (id SERIAL PRIMARY KEY, group_id INTEGER NOT NULL REFERENCES medication_groups(id) ON DELETE CASCADE, medication_stock_id INTEGER REFERENCES medication_stock(id), medicine_name VARCHAR NOT NULL, dosage VARCHAR, duration VARCHAR, quantity VARCHAR, notes VARCHAR, sort_order INTEGER DEFAULT 0)",
                 "CREATE INDEX IF NOT EXISTS ix_medication_groups_clinic ON medication_groups (clinic_id)",

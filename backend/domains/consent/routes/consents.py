@@ -15,6 +15,8 @@ from core.dtos import (
 )
 from core.auth_utils import get_current_user
 from domains.consent.seed_consents import seed_clinic_consents
+from domains.consent.rich_content import clean_for_storage
+from domains.consent.library import LANGUAGES, LANGUAGE_CODES, library_forms, library_form
 
 router = APIRouter()
 
@@ -55,9 +57,107 @@ def list_templates(
 
 
 # /starter-library and /templates/adopt lived here. They backed the
-# "Ready-made forms" picker, which is gone: the defaults are seeded into the
-# list instead, so there is nothing left to browse and adopt. The wording
-# itself still lives in starter_templates.py, which seed_consents reads.
+# "Ready-made forms" picker, which is gone: the English defaults are seeded
+# into the list instead. The library below is different: it is the same six
+# forms in other languages, which are never seeded, only copied on request.
+
+
+@router.get("/library")
+def consent_library(
+    language: str = "en",
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """The ready forms in one language, and which of them this clinic has.
+
+    `added` matches on name, which is what a copy keeps, so a form the clinic
+    added and later renamed shows as addable again. That is the honest answer:
+    the clinic no longer has a form by that name.
+    """
+    if language not in LANGUAGE_CODES:
+        raise HTTPException(status_code=400, detail="That language isn't in the library")
+    have = {
+        (n or "").strip().lower()
+        for (n,) in db.query(ConsentTemplate.name).filter(
+            ConsentTemplate.clinic_id == current_user.clinic_id
+        ).all()
+    }
+    forms = library_forms(language)
+    return {
+        "languages": LANGUAGES,
+        "language": language,
+        "forms": [
+            {**f, "added": f["name"].strip().lower() in have}
+            for f in forms
+        ],
+    }
+
+
+class LibraryAddRequest(BaseModel):
+    language: str
+    key: str
+
+
+@router.post("/library/add", response_model=ConsentTemplateResponseDTO)
+def add_from_library(
+    payload: LibraryAddRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """Copy a library form into the clinic, starred. Adding one it already
+    has (same name) stars the existing copy instead of making a second."""
+    form = library_form(payload.language, payload.key)
+    if not form:
+        raise HTTPException(status_code=404, detail="That form isn't in the library")
+
+    existing = db.query(ConsentTemplate).filter(
+        ConsentTemplate.clinic_id == current_user.clinic_id,
+        func.lower(ConsentTemplate.name) == form["name"].strip().lower(),
+    ).first()
+    if existing:
+        existing.is_favorite = True
+        if existing.is_active is False:
+            existing.is_active = True
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    template = ConsentTemplate(
+        clinic_id=current_user.clinic_id,
+        name=form["name"],
+        category=form["category"],
+        content=form["content"],
+        language=form["language"],
+        is_favorite=True,
+        is_active=True,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+class FavoriteRequest(BaseModel):
+    is_favorite: bool
+
+
+@router.patch("/templates/{template_id}/favorite", response_model=ConsentTemplateResponseDTO)
+def set_favorite(
+    template_id: int,
+    payload: FavoriteRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    template = db.query(ConsentTemplate).filter(
+        ConsentTemplate.id == template_id,
+        ConsentTemplate.clinic_id == current_user.clinic_id,
+    ).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    template.is_favorite = payload.is_favorite
+    db.commit()
+    db.refresh(template)
+    return template
 
 
 @router.get("/signed")
@@ -160,9 +260,15 @@ async def create_template(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    data = template_data.dict()
+    data["content"] = clean_for_storage(data.get("content"))
+    if data.get("language") not in LANGUAGE_CODES:
+        data["language"] = "en"
+    if data.get("is_active") is None:
+        data["is_active"] = True
     template = ConsentTemplate(
         clinic_id=current_user.clinic_id,
-        **template_data.dict()
+        **data
     )
     db.add(template)
     db.commit()
@@ -183,7 +289,12 @@ async def update_template(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     
-    for key, value in template_data.dict(exclude_unset=True).items():
+    changes = template_data.dict(exclude_unset=True)
+    if "content" in changes:
+        changes["content"] = clean_for_storage(changes["content"])
+    if "language" in changes and changes["language"] not in LANGUAGE_CODES:
+        changes.pop("language")
+    for key, value in changes.items():
         setattr(template, key, value)
     
     db.commit()

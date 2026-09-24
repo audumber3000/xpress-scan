@@ -1382,7 +1382,13 @@ class ConsentTemplate(Base):
     # What kind of consent this is. Groups the list so a clinic finds "the
     # extraction one" by shape instead of reading every name.
     category = Column(String, nullable=True)
-    content = Column(Text, nullable=False)  # HTML or Markdown with variables
+    # Plain text (one paragraph per line) or, from the web editor, sanitised
+    # HTML. The content itself says which: see domains/consent/rich_content.py.
+    content = Column(Text, nullable=False)
+    # Language the wording is written in, as an ISO code ('en', 'hi', 'te'…).
+    language = Column(String(8), nullable=True, default='en')
+    # Starred forms sort first here and in the patient's quick picks.
+    is_favorite = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

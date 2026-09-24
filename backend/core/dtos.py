@@ -764,14 +764,20 @@ class ConsentTemplateBaseDTO(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     content: str = Field(..., min_length=1)
     category: Optional[str] = None
+    # Optional on the way in so older clients (mobile) keep working; rows
+    # written before these columns existed read back as English, unstarred.
+    language: Optional[str] = Field('en', max_length=8)
+    is_favorite: Optional[bool] = False
 
 class ConsentTemplateCreateDTO(ConsentTemplateBaseDTO):
-    pass
+    is_active: Optional[bool] = True
 
 class ConsentTemplateUpdateDTO(BaseModel):
     name: Optional[str] = None
     content: Optional[str] = None
     category: Optional[str] = None
+    language: Optional[str] = Field(None, max_length=8)
+    is_favorite: Optional[bool] = None
     is_active: Optional[bool] = None
 
 class ConsentTemplateResponseDTO(ConsentTemplateBaseDTO):

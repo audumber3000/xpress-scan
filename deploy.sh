@@ -313,6 +313,8 @@ run_migration "consent_pdf_sha"      "ALTER TABLE patient_consents ADD COLUMN IF
 # something anything joins on. NULL on every clinic that has not set one up,
 # which is what keeps their documents printing exactly as they do today.
 run_migration "clinic_document_doctors" "ALTER TABLE clinics ADD COLUMN IF NOT EXISTS document_doctors JSON"
+run_migration "consent_template_language" "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS language VARCHAR(8) DEFAULT 'en'"
+run_migration "consent_template_is_favorite" "ALTER TABLE consent_templates ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE"
 
 # Imaging filed as a category of document, with the area and the note the
 # upload drawer has always asked for and never stored.
