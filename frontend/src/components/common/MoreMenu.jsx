@@ -19,8 +19,9 @@ import { MoreVertical } from 'lucide-react';
  *
  * items: [{ key, label, icon?, onClick, disabled?, hint?, danger? }]
  *        a falsy entry is skipped, so callers can inline `cond && {...}`.
+ * compact: icon-only trigger for a table row; `label` becomes its aria-label.
  */
-const MoreMenu = ({ items = [], label = 'More', className = '', align = 'right' }) => {
+const MoreMenu = ({ items = [], label = 'More', className = '', align = 'right', compact = false }) => {
   const visible = items.filter(Boolean);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
@@ -80,14 +81,15 @@ const MoreMenu = ({ items = [], label = 'More', className = '', align = 'right' 
         aria-haspopup="menu"
         aria-expanded={open}
         title={label}
-        className={`inline-flex justify-center items-center gap-2 whitespace-nowrap h-10 px-3.5 border rounded-lg text-sm font-semibold bg-white transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2a276e] ${
+        aria-label={compact ? label : undefined}
+        className={`inline-flex justify-center items-center gap-2 whitespace-nowrap ${compact ? 'h-8 w-8' : 'h-10 px-3.5'} border rounded-lg text-sm font-semibold bg-white transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2a276e] ${
           open
             ? 'border-[#2a276e]/30 text-[#2a276e] bg-[#2a276e]/[0.04]'
             : 'border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300'
         }`}
       >
-        {label}
-        <MoreVertical size={18} className="text-[#2a276e]" />
+        {!compact && label}
+        <MoreVertical size={compact ? 16 : 18} className="text-[#2a276e]" />
       </button>
 
       {open && (

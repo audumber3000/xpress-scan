@@ -19,6 +19,9 @@ import { ColGroup, ResizableHead } from '../../components/common/ColumnResizer';
 import { generatePatientPersona, generateInitialsAvatar } from '../../utils/avatar';
 import EmptyState from '../../components/common/EmptyState';
 import { medicalCare, takeOutBoxes } from '../../assets/illustrations';
+import ConfirmDialog from '../../components/common/ConfirmDialog';
+import LabPartnerFields from '../../components/lab/LabPartnerFields';
+import EditLabPartnerModal from '../../components/lab/EditLabPartnerModal';
 
 // Matches the other list pages. Ten was a page of table and half a page of
 // nothing once the summary cards scroll away.
@@ -36,11 +39,12 @@ const LAB_ORDER_COLUMNS = [
 ];
 
 const LAB_PARTNER_COLUMNS = [
-    { key: 'partner', label: 'Lab Partner', width: 24, min: 150 },
-    { key: 'contact', label: 'Contact',     width: 18, min: 120 },
-    { key: 'email',   label: 'Email',       width: 22, min: 140 },
-    { key: 'address', label: 'Address',     width: 24, min: 150 },
-    { key: 'status',  label: 'Status',      width: 12, min: 96, align: 'right' },
+    { key: 'partner', label: 'Lab Partner', width: 23, min: 150 },
+    { key: 'contact', label: 'Contact',     width: 16, min: 120 },
+    { key: 'email',   label: 'Email',       width: 20, min: 140 },
+    { key: 'address', label: 'Address',     width: 27, min: 150 },
+    { key: 'status',  label: 'Status',      width: 9,  min: 90 },
+    { key: 'actions', label: '',            width: 5,  min: 56, align: 'right' },
 ];
 import { 
     Beaker, 
@@ -58,7 +62,9 @@ import {
     Calendar,
     ChevronRight,
     MapPin,
-    Columns3
+    Columns3,
+    Pencil,
+    Trash2
 } from 'lucide-react';
 
 const LabHub = () => {
@@ -87,6 +93,9 @@ const LabHub = () => {
     const [vendorsPage, setVendorsPage] = useState(1);
     const [isVendorDrawerOpen, setIsVendorDrawerOpen] = useState(false);
     const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
+    const [editingVendor, setEditingVendor] = useState(null);
+    const [deletingVendor, setDeletingVendor] = useState(null);
+    const [removingVendor, setRemovingVendor] = useState(false);
 
     // Search & filter states
     const [searchTerm, setSearchTerm] = useState('');
@@ -147,6 +156,43 @@ const LabHub = () => {
             ));
         } finally {
             setSavingVendor(false);
+        }
+    };
+
+    const handleUpdateVendor = async (id, fields) => {
+        try {
+            const updated = await api.put(`/vendors/${id}`, fields);
+            setVendors(prev => prev.map(v => (v.id === id ? { ...v, ...(updated || fields) } : v)));
+            setEditingVendor(null);
+            notify.done('Lab partner updated');
+        } catch (err) {
+            notify.problem(getPermissionAwareErrorMessage(
+                err,
+                "Couldn't save the lab partner",
+                "You don't have permission to edit lab partners."
+            ));
+            throw err;
+        }
+    };
+
+    // The backend keeps the row (old orders still point at it) and marks it
+    // inactive, so it drops out of this list and the order picker.
+    const handleDeleteVendor = async () => {
+        if (!deletingVendor || removingVendor) return;
+        setRemovingVendor(true);
+        try {
+            await api.delete(`/vendors/${deletingVendor.id}`);
+            setVendors(prev => prev.map(v => (v.id === deletingVendor.id ? { ...v, is_active: false } : v)));
+            setDeletingVendor(null);
+            notify.done('Lab partner removed');
+        } catch (err) {
+            notify.problem(getPermissionAwareErrorMessage(
+                err,
+                "Couldn't remove the lab partner",
+                "You don't have permission to remove lab partners."
+            ));
+        } finally {
+            setRemovingVendor(false);
         }
     };
 
@@ -231,6 +277,7 @@ const LabHub = () => {
 
     const filteredLabVendors = useMemo(() => {
         return vendors.filter(v => {
+            if (v.is_active === false) return false;
             const term = searchTerm.toLowerCase();
             if (term && !v.name?.toLowerCase().includes(term) && !v.phone?.includes(term) && !v.email?.toLowerCase().includes(term)) return false;
             return true;
@@ -254,7 +301,7 @@ const LabHub = () => {
                     <div className="flex gap-10">
                         {[
                             { id: 'orders', label: 'Clinical Orders', icon: Beaker },
-                            { id: 'vendors', label: 'Technical Partners', icon: Building2 }
+                            { id: 'vendors', label: 'Lab Partners', icon: Building2 }
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -286,7 +333,7 @@ const LabHub = () => {
                                 className="bg-[#2a276e] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#1a1548] transition-colors shadow-sm flex items-center gap-2"
                             >
                                 <Plus size={18} />
-                                Add Vendor
+                                Add Lab Partner
                             </button>
                         )}
                     </div>
@@ -484,7 +531,7 @@ const LabHub = () => {
                     ) : (
                         /* Vendors Table */
                         <div className="flex flex-col flex-1 min-h-0">
-                            {vendors.length > 0 ? (
+                            {vendors.some(v => v.is_active !== false) ? (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col flex-1 min-h-0">
                                     <div className="flex-1">
                                     <table ref={tableRef} className="w-full min-w-[860px] table-fixed mp-table-fixed divide-y divide-gray-200">
@@ -520,11 +567,34 @@ const LabHub = () => {
                                                             {vendor.address || '—'}
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                    <td className="px-6 py-4 whitespace-nowrap">
                                                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-green-50 text-green-700 border-green-200">
                                                             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                                                             Active
                                                         </span>
+                                                    </td>
+                                                    <td className="px-3 py-4 whitespace-nowrap text-right">
+                                                        <MoreMenu
+                                                            compact
+                                                            className="inline-block"
+                                                            label={`Actions for ${vendor.name}`}
+                                                            items={[
+                                                                {
+                                                                    key: 'edit',
+                                                                    label: 'Edit',
+                                                                    icon: <Pencil size={15} />,
+                                                                    onClick: () => setEditingVendor(vendor),
+                                                                },
+                                                                {
+                                                                    key: 'delete',
+                                                                    label: 'Remove',
+                                                                    icon: <Trash2 size={15} />,
+                                                                    hint: 'Past orders keep its name',
+                                                                    danger: true,
+                                                                    onClick: () => setDeletingVendor(vendor),
+                                                                },
+                                                            ]}
+                                                        />
                                                     </td>
                                                 </tr>
                                             ))}
@@ -560,56 +630,23 @@ const LabHub = () => {
                     <div className="px-8 py-8 border-b border-gray-50 flex items-center justify-between">
                         <div>
                             <h2 className="text-xl font-bold text-gray-900">New Lab Partner</h2>
-                            <p className="text-sm text-gray-500 mt-1">Add a new laboratory vendor</p>
+                            <p className="text-sm text-gray-500 mt-1">Add a lab you send work to</p>
                         </div>
                         <button onClick={() => setIsVendorDrawerOpen(false)} className="w-12 h-12 rounded-2xl hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
                             <Plus size={24} className="rotate-45" />
                         </button>
                     </div>
                     
-                    <form onSubmit={handleAddVendor} className="flex-1 overflow-y-auto px-8 py-8 space-y-8">
-                       <div className="space-y-2">
-                           <label className="text-xs font-medium text-gray-700">Laboratory Name</label>
-                           <input 
-                            required
-                            type="text" 
-                            placeholder="e.g. Precision Dental Labs" 
-                            value={vendorForm.name}
-                            onChange={e => setVendorForm({...vendorForm, name: e.target.value})}
-                            className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 outline-none text-sm transition-all" 
-                           />
-                       </div>
-                       <div className="space-y-2">
-                           <label className="text-xs font-medium text-gray-700">Contact Number</label>
-                           <input 
-                            required
-                            type="text" 
-                            placeholder="+1 234 567 890" 
-                            value={vendorForm.phone}
-                            onChange={e => setVendorForm({...vendorForm, phone: e.target.value})}
-                            className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 outline-none text-sm transition-all" 
-                           />
-                       </div>
-                       <div className="space-y-2">
-                           <label className="text-xs font-medium text-gray-700">Email (Optional)</label>
-                           <input 
-                            type="email" 
-                            placeholder="contact@lab.com" 
-                            value={vendorForm.email}
-                            onChange={e => setVendorForm({...vendorForm, email: e.target.value})}
-                            className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 outline-none text-sm transition-all" 
-                           />
-                       </div>
-                       <div className="space-y-2">
-                           <label className="text-xs font-medium text-gray-700">Laboratory Address</label>
-                           <textarea 
-                            rows={3}
-                            placeholder="Full physical address..." 
-                            value={vendorForm.address}
-                            onChange={e => setVendorForm({...vendorForm, address: e.target.value})}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 outline-none text-sm resize-none transition-all" 
-                           />
-                       </div>
+                    <form onSubmit={handleAddVendor} className="flex-1 overflow-y-auto px-8 py-8">
+                        {/* Mounted only while open, so the Places search is
+                            wired to a live input and resets between uses. */}
+                        {isVendorDrawerOpen && (
+                            <LabPartnerFields
+                                value={vendorForm}
+                                onChange={(next) => setVendorForm({ ...vendorForm, ...next })}
+                                idPrefix="lab-new"
+                            />
+                        )}
                     </form>
                     
                     <div className="px-8 py-8 border-t border-gray-50 bg-gray-50/30">
@@ -625,6 +662,26 @@ const LabHub = () => {
                     </div>
                 </div>
             </div>
+
+            <EditLabPartnerModal
+                partner={editingVendor}
+                onClose={() => setEditingVendor(null)}
+                onSave={handleUpdateVendor}
+            />
+
+            <ConfirmDialog
+                open={!!deletingVendor}
+                onClose={() => !removingVendor && setDeletingVendor(null)}
+                tone="danger"
+                title={`Remove ${deletingVendor?.name || 'this lab'}?`}
+                message="It won't show up in new lab orders. Orders already sent to it keep its name."
+                actions={[{
+                    label: removingVendor ? 'Removing…' : 'Remove lab partner',
+                    variant: 'danger',
+                    disabled: removingVendor,
+                    onClick: handleDeleteVendor,
+                }]}
+            />
 
             {/* Lab Order Drawer */}
             <LabOrderDrawer

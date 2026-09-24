@@ -34,6 +34,9 @@ import GoogleGlyph from '../common/GoogleGlyph';
  *   onPlace     (details) => void  city/state/postal_code/latitude/longitude/google_place_id
  *   onManual    () => void         fired once, when they choose to type instead
  *   inputId     for the label's htmlFor
+ *   label, searchPlaceholder, hint
+ *               copy overrides, so the same field can find a lab or a
+ *               supplier as well as the clinic. Defaults are the signup copy.
  */
 
 const FIELD =
@@ -60,6 +63,9 @@ const ClinicAddressField = ({
   onPlace,
   onManual,
   inputId = 'ob-address',
+  label = 'Clinic address *',
+  searchPlaceholder = 'Search Google for your clinic',
+  hint = null,
 }) => {
   const searchEl = useRef(null);
   const mapEl = useRef(null);
@@ -174,7 +180,7 @@ const ClinicAddressField = ({
     <div>
       <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-gray-700">
         <span className="flex items-center gap-1.5">
-          <MapPin className="w-4 h-4 text-gray-400" /> Clinic address *
+          <MapPin className="w-4 h-4 text-gray-400" /> {label}
         </span>
       </label>
 
@@ -206,7 +212,7 @@ const ClinicAddressField = ({
             type="text"
             disabled={status === 'loading'}
             placeholder={
-              status === 'loading' ? 'Loading map…' : 'Search Google for your clinic'
+              status === 'loading' ? 'Loading map…' : searchPlaceholder
             }
             className={`${FIELD} pl-10 disabled:bg-gray-50 disabled:text-gray-400`}
             // Enter would otherwise submit the step out from under the
@@ -253,7 +259,9 @@ const ClinicAddressField = ({
 
       <div className="mt-1.5 flex items-center justify-between gap-3">
         <p className="text-xs text-gray-400">
-          {status === 'off'
+          {hint && !showMap
+            ? hint
+            : status === 'off'
             ? 'Prints at the top of every invoice and prescription.'
             : showMap
             ? 'Drag the pin if it is not exactly right.'

@@ -229,9 +229,12 @@ const LabOrderDrawer = ({ isOpen, onClose, patientId, casePaperId, onSave, order
                                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:border-[#2a276e] focus:ring-2 focus:ring-[#2a276e]/20 transition-all text-sm font-medium outline-none"
                             >
                                 <option value="">Select a laboratory...</option>
-                                {vendors.map(v => (
-                                    <option key={v.id} value={v.id}>{v.name}</option>
-                                ))}
+                                {/* A removed lab stays listed only on the order that already uses it. */}
+                                {vendors
+                                    .filter(v => v.is_active !== false || String(v.id) === String(formData.vendor_id))
+                                    .map(v => (
+                                        <option key={v.id} value={v.id}>{v.name}</option>
+                                    ))}
                             </select>
                             {vendors.length === 0 && (
                                 <p className="text-xs text-orange-500 font-semibold mt-1 flex items-center gap-1">
