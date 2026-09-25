@@ -139,12 +139,23 @@ export const AuthProvider: FC<PropsWithChildren<AuthProviderProps>> = ({ childre
         // Before clearing the session, check if the backend token is still valid.
         const storedUser = await authApiService.getUserInfo()
         if (storedUser) {
-          const freshUser = await authApiService.getCurrentUser()
-          if (freshUser) {
+          const check = await authApiService.checkSession()
+          if (check.status === 'ok' && check.user) {
             // Backend token still valid — keep the session alive (staff or
             // post-restart session where Firebase persistence is missing)
-            setBackendUser(freshUser)
-            setAuthEmail(freshUser.email || '')
+            setBackendUser(check.user)
+            setAuthEmail(check.user.email || '')
+            setAuthProvider('email')
+            setIsLoading(false)
+            return
+          }
+          if (check.status === 'unreachable') {
+            // No answer is not a "no". This branch used to sign out anyone
+            // who opened the app without a connection, which is how QR and
+            // email staff kept getting logged out. Keep the cached session;
+            // a genuinely revoked token still ends it on the next request.
+            setBackendUser(storedUser)
+            setAuthEmail(storedUser.email || '')
             setAuthProvider('email')
             setIsLoading(false)
             return

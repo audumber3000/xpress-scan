@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getInstallId } from './installId';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import { getFixIfAlreadyAllowed } from '../../shared/utils/location';
@@ -264,6 +265,27 @@ export class AuthApiService extends BaseApiService {
     }
   }
 
+  /**
+   * Whether the stored session still holds, telling the two kinds of "no"
+   * apart. getCurrentUser answers null for both, and the app used to treat
+   * every null as signed out, so opening it on weak clinic Wi-Fi, or during a
+   * slow server moment, wiped a perfectly valid session. Only `rejected` (the
+   * server said 401/403) means the session is over.
+   */
+  async checkSession(): Promise<{ status: 'ok' | 'rejected' | 'unreachable'; user: BackendUser | null }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await this.fetchWithTimeout(`${this.baseURL}/auth/me`, { method: 'GET', headers });
+      if (response.status === 401 || response.status === 403) return { status: 'rejected', user: null };
+      if (!response.ok) return { status: 'unreachable', user: null };
+      const user = this.transformUser(await response.json());
+      await AsyncStorage.setItem('backend_user', JSON.stringify(user));
+      return { status: 'ok', user };
+    } catch {
+      return { status: 'unreachable', user: null };
+    }
+  }
+
   async switchClinic(clinicId: string): Promise<BackendUser | null> {
     try {
       const headers = await this.getAuthHeaders();
@@ -302,6 +324,7 @@ export class AuthApiService extends BaseApiService {
             device_name: 'Mobile App',
             device_type: 'mobile',
             device_platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
+            device_serial: await getInstallId(),
             // Only if the permission is already granted from clocking in. Signing
             // in is the wrong moment to interrupt somebody with a location
             // dialog to fill a column on an admin screen, and an app that
@@ -373,6 +396,7 @@ export class AuthApiService extends BaseApiService {
             device_name: Device.modelName || 'Mobile App',
             device_type: 'mobile',
             device_platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
+            device_serial: await getInstallId(),
             ...(await getFixIfAlreadyAllowed(4000) ?? {}),
           },
         }),
@@ -406,6 +430,7 @@ export class AuthApiService extends BaseApiService {
             device_name: 'Mobile App',
             device_type: 'mobile',
             device_platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
+            device_serial: await getInstallId(),
             // Only if the permission is already granted from clocking in. Signing
             // in is the wrong moment to interrupt somebody with a location
             // dialog to fill a column on an admin screen, and an app that
