@@ -47,6 +47,15 @@ function buildMetrics(d) {
   const revSeries = Array.isArray(rev.series) ? rev.series : null;
   const hasRevBars = revSeries && revSeries.length >= 3 && revSeries.some((v) => v > 0);
   const bestDay = hasRevBars ? Math.max(...revSeries) : 0;
+  const hourly = d.series_granularity === 'hour';
+  const fallback = d.series_granularity === 'day_fallback';
+  const peakPhrase = hasRevBars
+    ? hourly
+      ? (rev.peak_label ? ` Busiest around ${rev.peak_label}.` : '')
+      : fallback
+        ? ' Bars show the last 30 days.'
+        : ` Best day ${formatCompactMoney(bestDay)}.`
+    : '';
 
   const patSeries = Array.isArray(pat.series) ? pat.series : [];
   const unmarked = app.unmarked ?? 0;
@@ -71,9 +80,11 @@ function buildMetrics(d) {
       sparkline: hasRevBars ? revSeries : null,
       sparklineLabels: hasRevBars ? labels : null,
       story: rev.billed > 0
-        ? `${formatMoney(rev.billed)} billed in the same period${hasRevBars ? `. Best day ${formatCompactMoney(bestDay)}.` : '.'}`
-        : 'No invoices raised in this period yet.',
-      storyShort: hasRevBars ? `Best day ${formatCompactMoney(bestDay)}` : (rev.billed > 0 ? `of ${formatCompactMoney(rev.billed)} billed` : 'No invoices yet'),
+        ? `${formatMoney(rev.billed)} billed in the same period.${peakPhrase}`
+        : hasRevBars ? peakPhrase.trim() : 'No invoices raised in this period yet.',
+      storyShort: hasRevBars && hourly && rev.peak_label ? `peak ${rev.peak_label}`
+        : hasRevBars && !fallback ? `Best day ${formatCompactMoney(bestDay)}`
+          : (rev.billed > 0 ? `of ${formatCompactMoney(rev.billed)} billed` : 'No invoices yet'),
       raw: rev,
     },
     {
@@ -86,7 +97,8 @@ function buildMetrics(d) {
       value: pat.value,
       icon: iconNode('tooth'),
       variant: 'spark',
-      // Same window as the headline (it used to be a fixed last-7-days).
+      // Same buckets as the revenue bars (hourly on a single day, the last 30
+      // days on All time for a clinic under three months old).
       sparkline: patSeries.some((v) => v > 0) ? patSeries : [],
       sparklineLabels: labels,
       story: pat.returning > 0
@@ -132,12 +144,13 @@ function buildMetrics(d) {
       value: app.value,
       icon: iconNode('calendar'),
       variant: 'breakdown',
-      // "Not marked yet" is past visits nobody closed: the row to act on.
+      rowsLayout: 'compact',
+      // "Not marked" is past visits nobody closed: the row to act on.
       // It used to hide inside "Scheduled" with the ones still to come.
       rows: [
         { label: 'Done', value: formatCount(app.completed), color: '#2f9e6e' },
         { label: 'Upcoming', value: formatCount(upcoming), color: '#8b86dd' },
-        ...(unmarked > 0 ? [{ label: 'Not marked yet', value: formatCount(unmarked), color: '#d99a1e' }] : []),
+        { label: 'Not marked', value: formatCount(unmarked), color: '#d99a1e' },
         { label: 'No-show', value: formatCount(app.missed), color: '#c23b3b' },
       ],
       story: app.value > 0

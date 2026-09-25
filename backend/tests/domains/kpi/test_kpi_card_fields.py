@@ -16,9 +16,41 @@ def test_dashboard_all_time_is_not_comparable_and_series_match_buckets(client, a
     assert "over_90_count" in month["outstanding"]
     assert "returning" in month["total_patients"]
 
-    # Payments carry no time, so a single day has no revenue bars.
+    # A single day is shown by clinic-local hour, clinic hours by default.
     today = client.get("/api/v1/dashboard/metrics?period=today", headers=auth_headers).json()
-    assert today["revenue"]["series"] is None
+    assert today["series_granularity"] == "hour"
+    assert today["series_labels"] == ["9am", "8pm"]
+    assert len(today["revenue"]["series"]) == 12 == len(today["total_patients"]["series"])
+
+    # A clinic under three months old gets the last 30 days on All time.
+    assert all_time["series_granularity"] == "day_fallback"
+    assert all_time["series_labels"] == ["30 days ago", "today"]
+    assert len(all_time["revenue"]["series"]) == 30
+
+
+def test_today_revenue_lands_in_its_clinic_hour(client, auth_headers, db_session, test_clinic, test_patient):
+    from datetime import date as _date
+    from core.clinic_time import clinic_today, clinic_day_bounds_utc
+    from models import Invoice, InvoicePayment
+    inv = Invoice(clinic_id=test_clinic.id, patient_id=test_patient.id, invoice_number="INV-H-1",
+                  status="paid_verified", total=500, paid_amount=500, due_amount=0)
+    db_session.add(inv)
+    db_session.commit()
+    day = clinic_today(test_clinic)
+    start_utc, _ = clinic_day_bounds_utc(test_clinic, day, day)
+    # 11:00 clinic time on the clinic's today.
+    db_session.add(InvoicePayment(invoice_id=inv.id, clinic_id=test_clinic.id, amount=500,
+                                  paid_on=day, method="Cash", created_at=start_utc + timedelta(hours=11)))
+    db_session.commit()
+    d = client.get("/api/v1/dashboard/metrics?period=today", headers=auth_headers).json()
+    series = d["revenue"]["series"]
+    # The range starts at 9am unless something (the test patient, created
+    # just now) happened earlier, so read the position off the first label.
+    first = d["series_labels"][0]
+    first_hour = int(first[:-2]) % 12 + (12 if first.endswith("pm") else 0)
+    assert series[11 - first_hour] == 500
+    assert sum(series) == 500
+    assert d["revenue"]["peak_label"] == "11am"
 
 
 def test_dashboard_splits_unmarked_from_upcoming(client, auth_headers, db_session, test_clinic, test_patient):

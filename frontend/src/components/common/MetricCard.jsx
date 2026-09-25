@@ -120,6 +120,23 @@ const Meter = ({ percent, hero, tone = 'primary' }) => {
 };
 
 // `hint` is an optional quiet second figure on the right ("3 cases", "42%").
+// `compact` lays the rows out two to a line, for a card whose rows are short
+// counts (Done 11 · Upcoming 4); four stacked rows made it the tallest card and
+// stretched the whole row with it.
+const CompactBreakdown = ({ rows }) => (
+  // Two per line only where the card is wide enough for the labels; on a
+  // narrow card they stack rather than truncate to "Upc…".
+  <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-3 gap-y-1 mt-auto pt-1.5 border-t border-gray-100">
+    {rows.map(({ label, value, color }) => (
+      <div key={label} className="flex items-center gap-1.5 text-[11px] min-w-0">
+        <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: color }} />
+        <span className="text-gray-500 truncate">{label}</span>
+        <span className="ml-auto font-bold text-gray-800 tabular-nums">{value}</span>
+      </div>
+    ))}
+  </div>
+);
+
 const Breakdown = ({ rows }) => (
   <div className="flex flex-col gap-1 mt-auto">
     {rows.map(({ label, value, color, hint }) => (
@@ -166,6 +183,7 @@ const MetricCard = ({
   sparklineHighlight,
   sparklineLabels,
   rows,
+  rowsLayout,       // 'compact' puts two rows on each line
   onClick,
   // What the drawer behind this card is called. Shown on hover, so it should
   // finish the sentence "…" rather than repeat the card's own title.
@@ -235,7 +253,9 @@ const MetricCard = ({
         />
       )}
 
-      {variant === 'breakdown' && rows?.length > 0 && <Breakdown rows={rows} />}
+      {variant === 'breakdown' && rows?.length > 0 && (
+        rowsLayout === 'compact' ? <CompactBreakdown rows={rows} /> : <Breakdown rows={rows} />
+      )}
 
       {(story || onClick) && (
         <p className={`relative text-[11px] leading-snug m-0 ${hero ? 'text-white/75' : 'text-gray-500'}`}>

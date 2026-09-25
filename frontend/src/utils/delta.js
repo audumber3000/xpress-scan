@@ -26,6 +26,9 @@ export const describeDelta = ({ change, changeType, previous, value, isMoney }) 
   const pct = Math.abs(Number(change) || 0);
   const up = changeType === 'up';
 
+  // Nothing on either side: there is no comparison to report, so no pill,
+  // rather than a "no change" that asserts one.
+  if (pct === 0 && Number(value) === 0 && Number(previous) === 0) return null;
   if (pct === 0) return { text: 'no change', tone: 'flat', up };
 
   const base = Number(previous);

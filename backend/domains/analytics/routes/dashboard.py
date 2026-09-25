@@ -314,14 +314,80 @@ def get_dashboard_metrics(
     ).scalar() or 0)
 
     # ── Trend series for the cards' bars ──────────────────────────────────────
-    # Same buckets the drawers use (period_buckets), so a card's bars and its
-    # drawer chart line up. Payments carry a date and no time, so there is no
-    # hourly revenue series for a single day; the card shows its sentence only.
-    buckets = period_buckets(period, db, final_clinic_id, now)
-    daily = period not in ("today", "yesterday")
+    # A single day is shown by clinic-local hour (payments carry created_at, so
+    # this is real). Longer periods reuse period_buckets, the same buckets the
+    # drawers use. "All time" on a clinic younger than three months would be
+    # one or two monthly bars, so it shows the last 30 days instead and labels
+    # them that way.
+    from core.clinic_time import clinic_tzinfo, clinic_day_bounds_utc
+    from zoneinfo import ZoneInfo
+    clinic_row = db.query(Clinic).filter(Clinic.id == final_clinic_id).first()
+    tz = clinic_tzinfo(clinic_row)
 
+    def _local_hour(moment):
+        if moment is None:
+            return None
+        return moment.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz).hour
+
+    def _hour_label(h):
+        return f"{h % 12 or 12}{'am' if h < 12 else 'pm'}"
+
+    series_granularity = "day"
     revenue_series = None
-    if daily:
+    patients_series = []
+    series_labels = None
+    peak_label = None
+
+    if period in ("today", "yesterday"):
+        series_granularity = "hour"
+        day = clinic_today(clinic_row) - timedelta(days=1 if period == "yesterday" else 0)
+        day_from, day_to = clinic_day_bounds_utc(clinic_row, day, day)
+        pay_hours = [
+            (_local_hour(created), float(amount or 0))
+            for created, amount in db.query(InvoicePayment.created_at, InvoicePayment.amount).filter(
+                InvoicePayment.clinic_id == final_clinic_id,
+                InvoicePayment.paid_on == day,
+                InvoicePayment.created_at.isnot(None),
+            ).all()
+        ]
+        pat_hours = [
+            _local_hour(created)
+            for (created,) in db.query(Patient.created_at).filter(
+                Patient.clinic_id == final_clinic_id,
+                Patient.created_at >= day_from,
+                Patient.created_at < day_to,
+            ).all()
+        ]
+        seen = [h for h, _ in pay_hours if h is not None] + [h for h in pat_hours if h is not None]
+        # Clinic hours by default, stretched to fit anything outside them.
+        lo, hi = min([9] + seen), max([20] + seen)
+        revenue_series = [0.0] * (hi - lo + 1)
+        for h, amount in pay_hours:
+            if h is not None:
+                revenue_series[h - lo] += amount
+        revenue_series = [round(v, 2) for v in revenue_series]
+        patients_series = [0] * (hi - lo + 1)
+        for h in pat_hours:
+            if h is not None:
+                patients_series[h - lo] += 1
+        series_labels = [_hour_label(lo), _hour_label(hi)]
+        if any(revenue_series):
+            peak_label = _hour_label(lo + revenue_series.index(max(revenue_series)))
+    else:
+        buckets = period_buckets(period, db, final_clinic_id, now)
+        if period == "all" and len(buckets) < 3:
+            buckets = [
+                ((today_start - timedelta(days=i)).strftime("%d %b"),
+                 today_start - timedelta(days=i),
+                 today_start - timedelta(days=i - 1))
+                for i in range(29, -1, -1)
+            ]
+            series_labels = ["30 days ago", "today"]
+            series_granularity = "day_fallback"
+        elif buckets:
+            series_labels = [buckets[0][0], buckets[-1][0]]
+            series_granularity = "month" if period == "all" else "day"
+
         pay_rows = db.query(InvoicePayment.paid_on, func.coalesce(func.sum(InvoicePayment.amount), 0.0)).filter(
             InvoicePayment.clinic_id == final_clinic_id,
             InvoicePayment.paid_on >= buckets[0][1].date(),
@@ -336,16 +402,15 @@ def get_dashboard_metrics(
                 revenue_series[i] += float(amount or 0)
         revenue_series = [round(v, 2) for v in revenue_series]
 
-    patient_times = db.query(Patient.created_at).filter(
-        Patient.clinic_id == final_clinic_id,
-        Patient.created_at >= buckets[0][1],
-        Patient.created_at < buckets[-1][2],
-    ).all()
-    patients_series = [0] * len(buckets)
-    for (created,) in patient_times:
-        i = _bucket_index(buckets, created)
-        if i is not None:
-            patients_series[i] += 1
+        patients_series = [0] * len(buckets)
+        for (created,) in db.query(Patient.created_at).filter(
+            Patient.clinic_id == final_clinic_id,
+            Patient.created_at >= buckets[0][1],
+            Patient.created_at < buckets[-1][2],
+        ).all():
+            i = _bucket_index(buckets, created)
+            if i is not None:
+                patients_series[i] += 1
 
     # Existing patients who came in during the period: the other half of "how
     # many people did we see", which the new-patient count cannot say.
@@ -362,11 +427,12 @@ def get_dashboard_metrics(
     # "All time" has no earlier window to compare with; period_range makes the
     # previous window equal the current one, so every trend there is noise.
     comparable = period != "all"
-    series_labels = [buckets[0][0], buckets[-1][0]] if buckets else None
 
     return {
         "comparable": comparable,
         "series_labels": series_labels,
+        # hour | day | month | day_fallback (all time, under three months)
+        "series_granularity": series_granularity,
         "total_patients": {
             "value": patients_count,
             "change": patient_change,
@@ -419,6 +485,7 @@ def get_dashboard_metrics(
             "billed": round(billed, 2),
             "collected_today": round(revenue_today, 2),
             "series": revenue_series,
+            "peak_label": peak_label,
         },
     }
 
