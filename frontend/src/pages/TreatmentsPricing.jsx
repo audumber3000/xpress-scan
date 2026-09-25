@@ -134,7 +134,7 @@ const TreatmentsPricing = ({ mode = 'services', embedded = false }) => {
 
   const [medications, setMedications] = useState([]);
   const [selectedMedCategory, setSelectedMedCategory] = useState('All');
-  const medCategories = ['All', 'General', 'Antibiotics', 'Analgesics', 'Gastrointestinal', 'Dental'];
+  const medCategories = ['All', 'General', 'Antibiotics', 'Analgesics', 'Gastrointestinal', 'Dental', 'Topical', 'Mouthwash'];
 
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

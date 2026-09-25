@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import FormDrawer, { Field, TextInput, SelectInput } from "../FormDrawer";
 import { getCurrencySymbol } from "../../utils/currency";
 
-const MED_CATEGORIES = ["General", "Antibiotics", "Analgesics", "Gastrointestinal", "Dental"];
+const MED_CATEGORIES = ["General", "Antibiotics", "Analgesics", "Gastrointestinal", "Dental", "Topical", "Mouthwash"];
 
 const blankFor = (type) => type === "service"
   ? { name: "", price: "" }

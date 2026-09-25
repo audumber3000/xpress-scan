@@ -11,7 +11,7 @@ import { api } from "../../utils/api";
  *  - "Enter manually": blank rows.
  * Posts to /medication-stock/bulk.
  */
-const FORMS = ["Tablet", "Capsule", "Syrup", "Injection", "Gel", "Drops", "Ointment", "Powder", "Other"];
+const FORMS = ["Tablet", "Capsule", "Syrup", "Injection", "Gel", "Drops", "Ointment", "Topical", "Mouthwash", "Powder", "Other"];
 const cell = "w-full px-2 py-1.5 border border-gray-200 rounded text-sm outline-none focus:ring-1 focus:ring-[#2a276e] focus:border-[#2a276e]";
 
 const emptyRow = () => ({ name: "", generic_name: "", strength: "", form: "Tablet", quantity: "0", unit: "Tablet", units_per_pack: "", price_per_unit: "0", batch_number: "", expiry_date: "", vendor_id: "" });

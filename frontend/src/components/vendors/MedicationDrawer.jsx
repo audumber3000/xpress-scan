@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import FormDrawer, { Field, TextInput, SelectInput } from "../FormDrawer";
 
-const FORMS = ["Tablet", "Capsule", "Syrup", "Injection", "Gel", "Drops", "Ointment", "Powder", "Other"];
+const FORMS = ["Tablet", "Capsule", "Syrup", "Injection", "Gel", "Drops", "Ointment", "Topical", "Mouthwash", "Powder", "Other"];
 const SCHEDULES = ["OTC", "H", "H1", "X"];
 const BASE_UNITS = ["Tablet", "Capsule", "ml", "Drop", "Sachet", "Piece", "Bottle", "Vial", "Tube"];
 const PACK_UNITS = ["Strip", "Box", "Bottle", "Vial", "Sheet", "Pack"];
