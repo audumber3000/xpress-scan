@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { isClinical } from '../../../employee/permissions';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   StatusBar, Alert, ActivityIndicator, Modal, Switch,
@@ -156,7 +157,7 @@ export const TeamScreen: React.FC<TeamScreenProps> = ({ navigation, route }) => 
   const filteredStaff = useMemo(() => staff.filter(m => {
     const matchSearch = m.name.toLowerCase().includes(staffSearch.toLowerCase());
     if (staffFilter === 'All') return matchSearch;
-    if (staffFilter === 'Doctors') return matchSearch && (m.role === 'doctor' || m.role === 'dentist');
+    if (staffFilter === 'Doctors') return matchSearch && (m.role === 'dentist' || isClinical(m.role));
     if (staffFilter === 'Receptionist') return matchSearch && m.role === 'receptionist';
     if (staffFilter === 'Inactive') return matchSearch && !m.is_active;
     return matchSearch;

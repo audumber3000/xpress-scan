@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { isClinical } from '../../../../employee/permissions';
 import { View, Text, ScrollView, StyleSheet, StatusBar, RefreshControl, Dimensions, Animated } from 'react-native';
 import { useAuth } from '../../../../../app/AuthContext';
 import { PlanStatusBanner } from '../../../../../shared/components/PlanStatusBanner';
@@ -205,7 +206,7 @@ export const ClinicOwnerHomeScreen: React.FC<HomeScreenProps> = ({ navigation })
 
   const firstName = (backendUser?.name || user?.displayName || 'Doctor').split(' ')[0];
   const role = backendUser?.role;
-  const userName = (role === 'clinic_owner' || role === 'doctor') ? `Dr. ${firstName}` : firstName;
+  const userName = isClinical(role) ? `Dr. ${firstName}` : firstName;
 
   // Global Sync: Load data whenever the active clinic changes or period changes
   useEffect(() => {

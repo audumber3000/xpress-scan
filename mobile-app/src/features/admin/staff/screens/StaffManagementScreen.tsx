@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { isClinical } from '../../../employee/permissions';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, FlatList } from 'react-native';
 import { showAlert } from '../../../../shared/components/alertService';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,7 +50,7 @@ export const StaffManagementScreen: React.FC<StaffManagementScreenProps> = ({ na
   const filteredStaff = staffMembers.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchQuery.toLowerCase());
     if (selectedFilter === 'All') return matchesSearch;
-    if (selectedFilter === 'Dentists') return matchesSearch && (member.role === 'dentist' || member.role === 'doctor');
+    if (selectedFilter === 'Dentists') return matchesSearch && (member.role === 'dentist' || isClinical(member.role));
     if (selectedFilter === 'Receptionist') return matchesSearch && member.role === 'receptionist';
     if (selectedFilter === 'Inactive') return matchesSearch && !member.is_active;
     return matchesSearch;

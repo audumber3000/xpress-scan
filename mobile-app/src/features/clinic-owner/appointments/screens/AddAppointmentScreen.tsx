@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { isClinical } from '../../../employee/permissions';
 import {
   View,
   Text,
@@ -130,7 +131,8 @@ export const AddAppointmentScreen: React.FC<AddAppointmentScreenProps> = ({ navi
       try {
         const staff = await adminApiService.getStaff();
         const doctors = (staff || [])
-          .filter((s: any) => s.role === 'doctor' || s.role === 'clinic_owner')
+          // Every clinical role; in-house doctors, associates and consultants were missing.
+          .filter((s: any) => isClinical(s.role))
           .map((d: any) => ({ id: d.id.toString(), name: d.name }));
         setDoctorOptions(doctors);
       } catch (error) {
