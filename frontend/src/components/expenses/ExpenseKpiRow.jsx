@@ -1,11 +1,12 @@
 import React from 'react';
 import {
-  Wallet, FlaskConical, Stethoscope, Building2,
+  Wallet, Building2,
   TrendingUp, Scale, Tag, Users,
   Package, ArrowUpRight, ArrowDownLeft,
 } from 'lucide-react';
 import KpiRow from '../common/KpiRow';
 import { formatCompactMoney, formatMoney, formatCount } from '../../utils/currency';
+import { clinicToday } from '../../utils/datetime';
 
 /**
  * The storytelling KPI cards above the Expenses table.
@@ -28,15 +29,21 @@ const plural = (n, one, many) => (n === 1 ? one : many);
 /** Payables tab: what is owed, to whom, for work already done. */
 function payablesCards(p) {
   const unpaid = p.unpaid || 0;
-  const paid = p.paid || 0;
-  const total = unpaid + paid;
-  const owedPct = pct(unpaid, total);
+  const agedPct = pct(p.aged || 0, unpaid);
 
   const lab = p.byKind?.lab || { amount: 0, count: 0 };
   const consultant = p.byKind?.consultant || { amount: 0, count: 0 };
   const bills = p.byKind?.bill || { amount: 0, count: 0 };
   const vendors = p.vendors || [];
   const overdue = p.overdue || 0;
+
+  // Three kinds of payee in one card; they used to be three cards of a single
+  // number each.
+  const kinds = [
+    { label: 'Labs', ...lab, color: '#2a276e' },
+    { label: 'Consultants', ...consultant, color: '#9B8CFF' },
+    { label: 'Suppliers', ...bills, color: '#c9c3f5' },
+  ].filter((k) => k.amount > 0).sort((a, b) => b.amount - a.amount);
 
   return [
     {
@@ -45,63 +52,38 @@ function payablesCards(p) {
       title: 'Owed right now',
       display: formatCompactMoney(unpaid),
       icon: ico(Wallet),
-      variant: 'meter',
-      // Invert: a rise in what you owe is not good news, and the shared
-      // delta colouring would otherwise render it in confident green.
       invert: true,
+      badge: overdue > 0 ? `${formatCompactMoney(overdue)} past due` : null,
+      badgeTone: 'bad',
+      // How old the debt is, like Outstanding on Payments. It used to be
+      // unpaid over (unpaid + paid), which has no meaning of its own.
+      variant: unpaid > 0 ? 'meter' : 'plain',
       story: p.unpaidCount > 0
         ? `Across ${formatCount(p.unpaidCount)} ${plural(p.unpaidCount, 'bill', 'bills')} to ${formatCount(vendors.length)} ${plural(vendors.length, 'payee', 'payees')}, for work already done.`
         : 'Nothing outstanding. Every bill recorded here has been settled.',
       storyShort: p.unpaidCount > 0 ? `${formatCount(p.unpaidCount)} unpaid` : 'all settled',
-      meterPercent: owedPct,
-      meterTone: owedPct > 70 ? 'warn' : undefined,
-      meterLeft: total > 0 ? `${owedPct}% still owed` : '',
-      meterRight: paid > 0 ? `${formatCompactMoney(paid)} settled` : '',
+      meterPercent: agedPct,
+      meterTone: 'warn',
+      meterLeft: unpaid > 0 ? `${agedPct}% older than 30 days` : '',
+      meterRight: p.oldestDays > 0 ? `oldest ${p.oldestDays}d` : '',
     },
     {
-      key: 'lab',
+      key: 'kinds',
       isMoney: true,
-      title: 'Lab bills',
-      display: formatCompactMoney(lab.amount),
-      icon: ico(FlaskConical),
-      variant: 'plain',
-      invert: true,
-      story: lab.count > 0
-        ? `${formatCount(lab.count)} unpaid lab ${plural(lab.count, 'bill', 'bills')}. Putting a cost on a lab order raises one.`
-        : 'A cost on a lab order raises a payable here automatically.',
-      storyShort: lab.count > 0 ? `${formatCount(lab.count)} unpaid` : 'none open',
-    },
-    {
-      key: 'consultant',
-      isMoney: true,
-      title: 'Consultant fees',
-      display: formatCompactMoney(consultant.amount),
-      icon: ico(Stethoscope),
-      variant: 'plain',
-      invert: true,
-      story: consultant.count > 0
-        ? `Owed on ${formatCount(consultant.count)} ${plural(consultant.count, 'case', 'cases')} to visiting doctors.`
-        : 'Fees added from a case paper land here before they are paid.',
-      storyShort: consultant.count > 0 ? `${formatCount(consultant.count)} cases` : 'none open',
-    },
-    {
-      key: 'bills',
-      isMoney: true,
-      title: 'Supplier bills',
-      display: formatCompactMoney(bills.amount),
+      title: 'By kind',
+      display: kinds[0]?.label || '—',
       icon: ico(Package),
-      variant: 'plain',
-      invert: true,
-      // Overdue leads when there is any, because that is the only number on
-      // this row that is costing the clinic a relationship rather than money.
-      story: overdue > 0
-        ? `${formatCompactMoney(overdue)} of it is past its due date across ${formatCount(p.overdueCount)} ${plural(p.overdueCount, 'bill', 'bills')}.`
-        : bills.count > 0
-          ? `${formatCount(bills.count)} open ${plural(bills.count, 'bill', 'bills')} from suppliers, none of them late yet.`
-          : 'Goods invoiced on credit appear here, and stay out of your costs until you pay them.',
-      storyShort: overdue > 0 ? `${formatCompactMoney(overdue)} overdue`
-        : bills.count > 0 ? `${formatCount(bills.count)} open` : 'none open',
-      tone: overdue > 0 ? 'warn' : undefined,
+      variant: kinds.length ? 'breakdown' : 'plain',
+      rows: kinds.map((k) => ({
+        label: k.label,
+        hint: `${formatCount(k.count)} ${plural(k.count, 'bill', 'bills')}`,
+        value: formatCompactMoney(k.amount),
+        color: k.color,
+      })),
+      story: kinds.length
+        ? `Most of what you owe is to ${kinds[0].label.toLowerCase()}.`
+        : 'Lab costs, consultant fees and supplier bills land here until paid.',
+      storyShort: kinds.length ? 'largest share' : 'none open',
     },
     {
       key: 'payees',
@@ -136,7 +118,9 @@ function pettyCashCards(c) {
   const spent = c.spent || 0;
   const last = c.lastClose || null;
   const variance = last ? last.variance : 0;
-  const spentPct = pct(spent, toppedUp);
+  const daysSinceCount = last?.closed_on
+    ? Math.max(0, Math.round((new Date(`${clinicToday()}T00:00:00`) - new Date(`${last.closed_on}T00:00:00`)) / 86400000))
+    : null;
 
   return [
     {
@@ -145,37 +129,37 @@ function pettyCashCards(c) {
       title: 'In the drawer',
       display: formatCompactMoney(balance),
       icon: ico(Wallet),
-      variant: 'meter',
-      story: balance > 0
-        ? 'Every top-up, less every spend. Nothing else goes into this figure.'
-        : 'Top up the float with what you keep in the drawer, then record what comes out of it.',
-      storyShort: balance > 0 ? 'should be there' : 'empty',
-      meterPercent: spentPct,
-      meterTone: spentPct > 80 ? 'warn' : undefined,
-      meterLeft: toppedUp > 0 ? `${spentPct}% of the float spent` : '',
-      meterRight: toppedUp > 0 ? `${formatCompactMoney(toppedUp)} put in` : '',
+      // No meter: it was spent over topped-up for an unlabelled 60 days,
+      // ignoring the opening balance the headline includes.
+      variant: 'plain',
+      story: daysSinceCount === null
+        ? 'Never counted. Close the day to check the drawer against this figure.'
+        : daysSinceCount === 0
+          ? 'Counted today.'
+          : `Last counted ${daysSinceCount} ${plural(daysSinceCount, 'day', 'days')} ago.`,
+      storyShort: daysSinceCount === null ? 'never counted' : `counted ${daysSinceCount}d ago`,
     },
     {
       key: 'spent',
       isMoney: true,
-      title: 'Spent',
+      title: 'Spent, last 60 days',
       display: formatCompactMoney(spent),
       icon: ico(ArrowUpRight),
       variant: 'plain',
       invert: true,
       story: c.spendCount > 0
-        ? `Across ${formatCount(c.spendCount)} ${plural(c.spendCount, 'payment', 'payments')} out of the drawer. Each one lands in your ledger as a cash expense.`
+        ? `Across ${formatCount(c.spendCount)} ${plural(c.spendCount, 'payment', 'payments')} out of the drawer, each one a cash expense in your ledger.`
         : 'Anything paid out of the drawer shows here, and in your ledger as a cash expense.',
       storyShort: c.spendCount > 0 ? `${formatCount(c.spendCount)} out` : 'nothing out',
     },
     {
       key: 'topped',
       isMoney: true,
-      title: 'Topped up',
+      title: 'Topped up, last 60 days',
       display: formatCompactMoney(toppedUp),
       icon: ico(ArrowDownLeft),
       variant: 'plain',
-      story: 'Money moved from the bank into the drawer. Not an expense — counting it would book the same rupee twice.',
+      story: 'Money moved from the bank into the drawer. Not an expense, so it is not counted as one.',
       storyShort: toppedUp > 0 ? 'into the drawer' : 'nothing in',
     },
     {
@@ -186,7 +170,8 @@ function pettyCashCards(c) {
         : '—',
       icon: ico(Scale),
       variant: 'plain',
-      tone: last && variance !== 0 ? 'warn' : undefined,
+      badge: last && variance !== 0 ? 'check the drawer' : null,
+      badgeTone: 'bad',
       story: last
         ? `Counted on ${last.closed_on} against ${formatCompactMoney(last.expected_amount)} expected. A difference is recorded, never corrected.`
         : 'Close the day to record what was actually in the drawer against what should have been.',
@@ -194,7 +179,6 @@ function pettyCashCards(c) {
     },
   ];
 }
-
 
 /**
  * Ledger tab: everything in and everything out.
@@ -206,7 +190,8 @@ function ledgerCards(l) {
   const income = l.inflow || 0;
   const expenses = l.outflow || 0;
   const net = income - expenses;
-  const ratio = pct(expenses, income);
+  const margin = income > 0 ? Math.round((net / income) * 100) : null;
+  const weekly = l.weekly || [];
 
   return [
     {
@@ -215,16 +200,16 @@ function ledgerCards(l) {
       title: 'Money out',
       display: formatCompactMoney(expenses),
       icon: ico(Wallet),
-      variant: 'meter',
+      // Spend per week. It used to be a meter of out over in, which has no
+      // natural 100% and clamped whenever spending ran ahead of collections.
+      variant: weekly.some((v) => v > 0) ? 'spark' : 'plain',
+      sparkline: weekly,
+      sparklineLabels: ['8 weeks ago', 'this week'],
       invert: true,
       story: l.expensesCount > 0
         ? `Across ${formatCount(l.expensesCount)} recorded ${plural(l.expensesCount, 'expense', 'expenses')} in this window.`
         : 'Nothing has gone out in this window.',
       storyShort: l.expensesCount > 0 ? `${formatCount(l.expensesCount)} expenses` : 'nothing out',
-      meterPercent: ratio,
-      meterTone: ratio > 70 ? 'warn' : undefined,
-      meterLeft: income > 0 ? `${ratio}% of what came in` : '',
-      meterRight: income > 0 ? `of ${formatCompactMoney(income)}` : '',
     },
     {
       key: 'in',
@@ -233,10 +218,8 @@ function ledgerCards(l) {
       display: formatCompactMoney(income),
       icon: ico(TrendingUp),
       variant: 'plain',
-      // Here so the number above it means something. Collections themselves
-      // are Payments' subject, and this card links across to it.
       story: income > 0
-        ? 'Everything collected in the same window, so the figure above has something to be measured against.'
+        ? 'Everything collected in the same window, to measure spending against.'
         : 'No collections in this window to measure spending against.',
       storyShort: income > 0 ? 'collected' : 'nothing in',
     },
@@ -247,8 +230,9 @@ function ledgerCards(l) {
       display: formatCompactMoney(net),
       icon: ico(Scale),
       variant: 'plain',
-      badge: income > 0 || expenses > 0 ? (net >= 0 ? 'in surplus' : 'in deficit') : undefined,
-      badgeTone: net >= 0 ? 'good' : 'bad',
+      // A margin only means something in surplus; "-383% margin" is noise.
+      badge: margin !== null && net >= 0 ? `${margin}% margin` : undefined,
+      badgeTone: 'good',
       story: income > 0
         ? `What is left after ${formatMoney(expenses)} of spending.`
         : 'Net is whatever is left once expenses come off collections.',

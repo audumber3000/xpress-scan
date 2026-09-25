@@ -355,6 +355,9 @@ def lab_summary(
     open_orders = [o for o in orders if (o.status or 'Draft') in OPEN_STATUSES]
     overdue = [o for o in open_orders if o.due_date and o.due_date < now]
     oldest_overdue = max(((now - o.due_date).days for o in overdue), default=0)
+    # Still on time but due within three days: the ones to chase before they
+    # become overdue.
+    due_soon = [o for o in open_orders if o.due_date and now <= o.due_date < now + timedelta(days=3)]
 
     done = [o for o in orders if (o.status or '') in DONE_STATUSES]
     turnarounds = sorted(d for d in (_turnaround_days(o) for o in done) if d is not None)
@@ -386,6 +389,7 @@ def lab_summary(
             "count": len(open_orders),
             "overdue": len(overdue),
             "oldest_overdue_days": oldest_overdue,
+            "due_soon": len(due_soon),
         },
         "turnaround": {
             "median_days": median_tat,

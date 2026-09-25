@@ -945,6 +945,12 @@ async def summarise_invoices(
         collected = (
             _q().with_entities(func.coalesce(func.sum(Invoice.paid_amount), 0.0)).scalar()
         ) or 0.0
+        # The same, over exactly the invoices `billed` counts (no drafts, no
+        # cancelled), so the card's collected-of-billed meter compares one set.
+        collected_issued = (
+            _q().filter(Invoice.status.notin_(('draft', 'cancelled')))
+            .with_entities(func.coalesce(func.sum(Invoice.paid_amount), 0.0)).scalar()
+        ) or 0.0
 
         # ── Everything below backs the storytelling KPI cards ──────────────
         # Same _q() filter set throughout, so a card can never describe a
@@ -981,6 +987,11 @@ async def summarise_invoices(
             .with_entities(func.min(invoice_date)).scalar()
         )
         oldest_days = int((now - oldest_dt).days) if oldest_dt else 0
+        # Bills unpaid past 90 days, for a badge on the card in place of a
+        # month-on-month pill that compared invoices *created* in each month.
+        over_90_count = owing_q.filter(
+            invoice_date < now - timedelta(days=90)
+        ).with_entities(func.count(Invoice.id)).scalar() or 0
 
         # ── Payment plans ──
         # An invoice is "on a plan" when it has taken at least one instalment
@@ -1022,6 +1033,24 @@ async def summarise_invoices(
         }
         lengths = sorted(plan_counts.values())
         median_len = lengths[len(lengths) // 2] if lengths else 0
+        # The card's median, over real instalment plans only. The one above
+        # counts every paid invoice, so bills paid in one go made "a typical
+        # plan runs 1 payment" the answer almost everywhere. Kept for mobile.
+        plan_lengths = sorted(n for n in plan_counts.values() if n >= 2)
+        plan_median = plan_lengths[len(plan_lengths) // 2] if plan_lengths else 0
+
+        # How far through their bills the open plans are, in money: a real
+        # part-of-whole for the card's meter.
+        plans_paid_total = plans_due_total = 0.0
+        plans_patients = 0
+        if open_plan_ids:
+            row = db.query(
+                func.coalesce(func.sum(Invoice.paid_amount), 0.0),
+                func.coalesce(func.sum(Invoice.due_amount), 0.0),
+                func.count(func.distinct(Invoice.patient_id)),
+            ).filter(Invoice.id.in_(open_plan_ids)).first()
+            plans_paid_total, plans_due_total = float(row[0] or 0), float(row[1] or 0)
+            plans_patients = int(row[2] or 0)
 
         # Histogram of "invoices that took N payments", for the card sparkline.
         histogram = {}
@@ -1101,6 +1130,7 @@ async def summarise_invoices(
             "paid_count": int(paid_count or 0),
 
             "billed": round(float(billed), 2),
+            "collected_issued": round(float(collected_issued), 2),
             "comparison": comparison,
             "outstanding": {
                 "amount": round(float(pending), 2),
@@ -1108,11 +1138,16 @@ async def summarise_invoices(
                 "patients": int(outstanding_patients),
                 "aged_amount": round(float(aged_amount), 2),
                 "oldest_days": oldest_days,
+                "over_90_count": int(over_90_count),
             },
             "plans": {
                 "open": len(open_plan_ids),
                 "median_length": int(median_len),
                 "payments_total": payments_total,
+                "plan_median": int(plan_median),
+                "paid_total": round(plans_paid_total, 2),
+                "due_total": round(plans_due_total, 2),
+                "patients": plans_patients,
                 "histogram": [
                     {"payments": n, "invoices": histogram[n]} for n in sorted(histogram)
                 ],

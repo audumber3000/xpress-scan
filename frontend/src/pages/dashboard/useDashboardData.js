@@ -11,7 +11,7 @@ const iconNode = (key) => React.createElement(METRIC_ICONS[key] || ToothIcon);
 
 const DEFAULT_METRICS = [
   { key: 'revenue', title: 'Revenue collected', display: '—', change: 0, changeType: 'up', icon: iconNode('revenue'), variant: 'hero' },
-  { key: 'patients', title: 'Total patients', display: '—', change: 0, changeType: 'up', icon: iconNode('tooth'), variant: 'spark' },
+  { key: 'patients', title: 'New patients', display: '—', change: 0, changeType: 'up', icon: iconNode('tooth'), variant: 'spark' },
   { key: 'outstanding', title: 'Outstanding', display: '—', change: 0, changeType: 'up', icon: iconNode('outstanding'), variant: 'meter', invert: true },
   { key: 'appointments', title: 'Appointments', display: '—', change: 0, changeType: 'up', icon: iconNode('calendar'), variant: 'breakdown' },
 ];
@@ -36,58 +36,78 @@ function buildMetrics(d) {
   const out = d.outstanding || {};
   const app = d.appointments || {};
 
-  const collectedPct = pct(rev.value, rev.billed);
+  // "All time" has no earlier window, so there is no honest trend to show.
+  const comparable = d.comparable !== false;
+  const trend = (m) => (comparable ? m.change : null);
+  const labels = d.series_labels || null;
+
   const agedPct = pct(out.aged_amount, out.value);
   const missRate = pct(app.missed, app.value);
+
+  const revSeries = Array.isArray(rev.series) ? rev.series : null;
+  const hasRevBars = revSeries && revSeries.length >= 3 && revSeries.some((v) => v > 0);
+  const bestDay = hasRevBars ? Math.max(...revSeries) : 0;
+
+  const patSeries = Array.isArray(pat.series) ? pat.series : [];
+  const unmarked = app.unmarked ?? 0;
+  const upcoming = app.upcoming ?? app.scheduled ?? 0;
 
   return [
     {
       key: 'revenue',
       title: 'Revenue collected',
       display: formatCompactMoney(rev.value),
-      change: rev.change,
+      change: trend(rev),
       changeType: rev.change_type,
       previous: rev.previous,
       value: rev.value,
       isMoney: true,
       icon: iconNode('revenue'),
       variant: 'hero',
+      // Bars: money received per day (or month) across the period, so the
+      // card answers "is it coming in steadily?". It used to be a meter of
+      // collected-by-payment-date over billed-by-invoice-date, two different
+      // groups of invoices that could pass 100%.
+      sparkline: hasRevBars ? revSeries : null,
+      sparklineLabels: hasRevBars ? labels : null,
       story: rev.billed > 0
-        ? `Collected ${formatMoney(rev.value)} of ${formatMoney(rev.billed)} billed. The gap is what's still owed.`
+        ? `${formatMoney(rev.billed)} billed in the same period${hasRevBars ? `. Best day ${formatCompactMoney(bestDay)}.` : '.'}`
         : 'No invoices raised in this period yet.',
-      storyShort: rev.billed > 0 ? `of ${formatCompactMoney(rev.billed)} billed` : 'No invoices yet',
-      meterPercent: collectedPct,
-      meterLeft: rev.billed > 0 ? `${collectedPct}% collected` : '',
-      meterRight: rev.collected_today > 0 ? `${formatCompactMoney(rev.collected_today)} today` : '',
+      storyShort: hasRevBars ? `Best day ${formatCompactMoney(bestDay)}` : (rev.billed > 0 ? `of ${formatCompactMoney(rev.billed)} billed` : 'No invoices yet'),
       raw: rev,
     },
     {
       key: 'patients',
-      title: 'Total patients',
+      title: 'New patients',
       display: formatCount(pat.value),
-      change: pat.change,
+      change: trend(pat),
       changeType: pat.change_type,
       previous: pat.previous,
       value: pat.value,
       icon: iconNode('tooth'),
       variant: 'spark',
-      sparkline: pat.sparkline || [],
-      story: pat.last_30_days > 0
-        ? `${formatCount(pat.last_30_days)} new in the last 30 days.`
-        : 'No new registrations in the last 30 days.',
-      storyShort: pat.last_30_days > 0 ? `+${formatCount(pat.last_30_days)} in 30 days` : 'None in 30 days',
+      // Same window as the headline (it used to be a fixed last-7-days).
+      sparkline: patSeries.some((v) => v > 0) ? patSeries : [],
+      sparklineLabels: labels,
+      story: pat.returning > 0
+        ? `${formatCount(pat.returning)} existing ${pat.returning === 1 ? 'patient' : 'patients'} came back for a visit.`
+        : pat.value > 0 ? 'No returning patients seen in this period.' : 'Nobody new registered in this period.',
+      storyShort: pat.returning > 0 ? `${formatCount(pat.returning)} came back` : 'None returning',
       raw: pat,
     },
     {
       key: 'outstanding',
       title: 'Outstanding',
       display: formatCompactMoney(out.value),
-      change: out.change,
-      changeType: out.change_type,
-      previous: out.previous,
+      // Not period-filtered, and the old "previous" was dues on invoices
+      // raised before the period, which is not a balance change. A fact
+      // replaces the trend: how many bills are past 90 days.
+      change: null,
       value: out.value,
       isMoney: true,
       invert: true,
+      badge: out.over_90_count > 0 ? `${formatCount(out.over_90_count)} over 90 days` : null,
+      badgeTone: 'bad',
       icon: iconNode('outstanding'),
       variant: 'meter',
       story: out.invoice_count > 0
@@ -98,7 +118,7 @@ function buildMetrics(d) {
         : 'All settled',
       meterPercent: agedPct,
       meterTone: 'warn',
-      meterLeft: out.invoice_count > 0 ? `${agedPct}% aged 30d+` : '',
+      meterLeft: out.invoice_count > 0 ? `${agedPct}% older than 30 days` : '',
       meterRight: out.oldest_days > 0 ? `oldest ${out.oldest_days}d` : '',
       raw: out,
     },
@@ -106,21 +126,20 @@ function buildMetrics(d) {
       key: 'appointments',
       title: 'Appointments',
       display: formatCount(app.value),
-      change: app.change,
+      change: trend(app),
       changeType: app.change_type,
       previous: app.previous,
       value: app.value,
       icon: iconNode('calendar'),
       variant: 'breakdown',
+      // "Not marked yet" is past visits nobody closed: the row to act on.
+      // It used to hide inside "Scheduled" with the ones still to come.
       rows: [
-        { label: 'Completed', value: formatCount(app.completed), color: '#2f9e6e' },
-        { label: 'Scheduled', value: formatCount(app.scheduled), color: '#8b86dd' },
+        { label: 'Done', value: formatCount(app.completed), color: '#2f9e6e' },
+        { label: 'Upcoming', value: formatCount(upcoming), color: '#8b86dd' },
+        ...(unmarked > 0 ? [{ label: 'Not marked yet', value: formatCount(unmarked), color: '#d99a1e' }] : []),
         { label: 'No-show', value: formatCount(app.missed), color: '#c23b3b' },
       ],
-      // The miss rate is the one number the deleted "Appointment outcomes"
-      // chart carried that this card did not already show. The chart was the
-      // three rows above drawn as stacked bars; the rate is the thing you act
-      // on, so it comes here as a sentence rather than as a fourth card.
       story: app.value > 0
         ? missRate > 0
           ? `${missRate}% were missed or cancelled, ${formatCount(app.missed)} of ${formatCount(app.value)}.`

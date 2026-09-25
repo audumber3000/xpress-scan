@@ -95,6 +95,38 @@ def _is_low(item):
     return (item.min_stock_level or 0) > 0 and (item.quantity or 0) <= item.min_stock_level
 
 
+def _moves_for(db: Session, clinic_id: int, since, items, meds, filtered: bool):
+    """Stock movements since `since`, limited to the filtered items when the
+    page has a category or search set, so Movement describes the same shelf
+    as the other cards."""
+    q = db.query(InventoryTransaction).filter(
+        InventoryTransaction.clinic_id == clinic_id,
+        InventoryTransaction.created_at >= since,
+    )
+    if filtered:
+        item_ids = [i.id for i in items] or [-1]
+        med_ids = [m.id for m in meds] or [-1]
+        q = q.filter(or_(
+            InventoryTransaction.inventory_item_id.in_(item_ids),
+            InventoryTransaction.medication_stock_id.in_(med_ids),
+        ))
+    return q.all()
+
+
+def _value_by_category(items, meds):
+    """Priced value on the shelf per category; medications are one category,
+    as everywhere else on this page."""
+    out = {}
+    for it in items:
+        if (it.price_per_unit or 0) > 0:
+            key = it.category or 'Uncategorised'
+            out[key] = out.get(key, 0.0) + float(it.quantity or 0) * float(it.price_per_unit)
+    for m in meds:
+        if (m.price_per_unit or 0) > 0:
+            out['Medications'] = out.get('Medications', 0.0) + float(m.quantity or 0) * float(m.price_per_unit)
+    return out
+
+
 @router.get("/summary")
 async def inventory_summary(
     category: Optional[str] = None,
@@ -130,13 +162,21 @@ async def inventory_summary(
         for i in everything if (i.price_per_unit or 0) > 0
     )
 
-    since = datetime.utcnow() - timedelta(days=30)
-    moves = db.query(InventoryTransaction).filter(
-        InventoryTransaction.clinic_id == cid,
-        InventoryTransaction.created_at >= since,
-    ).all()
+    now = datetime.utcnow()
+    since = now - timedelta(days=28)
+    moves = _moves_for(db, cid, since, items, meds, bool(category or (search and len(search.strip()) >= 2)))
     out_moves = [m for m in moves if (m.direction or 'out') == 'out']
     billed_out = [m for m in out_moves if m.invoice_line_item_id is not None]
+    # Uses per week over the last four weeks, oldest first, for the card bars.
+    out_series = [0, 0, 0, 0]
+    for m in out_moves:
+        if m.created_at:
+            wk = min(3, max(0, (now - m.created_at).days // 7))
+            out_series[3 - wk] += 1
+
+    # One item can be both low and expired; the headline counts it once.
+    flagged_ids = {id(i) for i in low} | {id(i) for i in expired} | {id(i) for i in expiring}
+    value_by_cat = _value_by_category(items, meds)
 
     return {
         "items": {
@@ -155,13 +195,15 @@ async def inventory_summary(
             # Distinguishes "nothing expires soon" from "nothing has a date" —
             # the alert reads 0 either way, and only one of those is good news.
             "expiry_tracked": sum(1 for i in everything if i.expiry_date is not None),
+            "flagged_items": len(flagged_ids),
         },
         "movement": {
             "total": len(moves),
             "out": len(out_moves),
             "in": len(moves) - len(out_moves),
             "billed": len(billed_out),
-            "window_days": 30,
+            "window_days": 28,
+            "out_series": out_series,
         },
         "setup": {
             "unpriced": len(unpriced),
@@ -169,6 +211,10 @@ async def inventory_summary(
             "priced_value": round(priced_value, 2),
             # The frontend shows a value card only when this is true.
             "value_usable": len(unpriced) == 0 and len(everything) > 0,
+            "value_by_category": [
+                {"category": k, "value": round(v, 2)}
+                for k, v in sorted(value_by_cat.items(), key=lambda x: -x[1])
+            ],
         },
     }
 
@@ -357,6 +403,29 @@ async def inventory_kpi_detail(
         return {"metric": metric, "period": period, "series": series,
                 "keys": ["cash", "digital"], "narrative": narrative, "rows": rows,
                 "is_money": False, "row_label": "Recent movements"}
+
+    # ── Stock value per category ──
+    if metric == "value":
+        by_cat = _value_by_category(items, meds)
+        series = [{"label": k, "total": round(v, 2)} for k, v in sorted(by_cat.items(), key=lambda x: -x[1])]
+        total = sum(by_cat.values())
+        _med_ids = {id(m) for m in meds}
+        priced = [i for i in everything if (i.price_per_unit or 0) > 0]
+        narrative = (
+            f"₹{total:,.0f} on the shelf across {len(by_cat)} "
+            f"{'category' if len(by_cat) == 1 else 'categories'}."
+            if by_cat else "Nothing priced yet, so there is no value to show."
+        )
+        rows = [{
+            "id": f"v{i.id}{'m' if id(i) in _med_ids else ''}",
+            "title": i.name,
+            "subtitle": f"{float(i.quantity or 0):g} {unit_of(i)} × ₹{float(i.price_per_unit):g}",
+            "display": f"₹{float(i.quantity or 0) * float(i.price_per_unit):,.0f}",
+            "bucket": 'Medications' if id(i) in _med_ids else (i.category or 'Uncategorised'),
+        } for i in sorted(priced, key=lambda x: -(float(x.quantity or 0) * float(x.price_per_unit)))]
+        return {"metric": metric, "period": period, "series": series, "keys": ["total"],
+                "narrative": narrative, "rows": rows, "is_money": True,
+                "x_label": "value per category", "row_label": "Priced items"}
 
     raise HTTPException(status_code=400, detail=f"Unknown metric '{metric}'")
 

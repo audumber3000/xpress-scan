@@ -120,6 +120,15 @@ def get_dashboard_metrics(
     ).group_by(Appointment.status).all()
 
     appt_completed = appt_missed = appt_scheduled = 0
+    # "Scheduled" lumped together bookings still to come and past visits that
+    # nobody closed. The second group is the one to act on, so it is counted
+    # on its own. `scheduled` stays in the payload for the mobile app.
+    appt_upcoming = int(db.query(func.count(Appointment.id)).filter(
+        Appointment.clinic_id == final_clinic_id,
+        Appointment.appointment_date >= max(start_date, now),
+        Appointment.appointment_date < end_date,
+        func.lower(func.coalesce(Appointment.status, 'scheduled')).notin_(['completed', 'no-show', 'no_show', 'cancelled']),
+    ).scalar() or 0)
     for raw_status, count in outcome_rows:
         s = (raw_status or 'confirmed').lower()
         if s == 'completed':
@@ -199,6 +208,17 @@ def get_dashboard_metrics(
         )
     ).scalar()
     oldest_days = int((now - oldest_dt).days) if oldest_dt else 0
+
+    # Invoices unpaid for over 90 days: the ones worth a phone call, shown as a
+    # badge on the card instead of a trend pill.
+    over_90_count = int(db.query(func.count(Invoice.id)).filter(
+        and_(
+            Invoice.clinic_id == final_clinic_id,
+            Invoice.due_amount > 0,
+            Invoice.status.notin_(['draft', 'cancelled']),
+            invoice_date < today_start - timedelta(days=90),
+        )
+    ).scalar() or 0)
 
     # Compared against the balance as it stood one period ago, approximated by
     # excluding invoices raised inside the current window.
@@ -293,7 +313,60 @@ def get_dashboard_metrics(
         )
     ).scalar() or 0)
 
+    # ── Trend series for the cards' bars ──────────────────────────────────────
+    # Same buckets the drawers use (period_buckets), so a card's bars and its
+    # drawer chart line up. Payments carry a date and no time, so there is no
+    # hourly revenue series for a single day; the card shows its sentence only.
+    buckets = period_buckets(period, db, final_clinic_id, now)
+    daily = period not in ("today", "yesterday")
+
+    revenue_series = None
+    if daily:
+        pay_rows = db.query(InvoicePayment.paid_on, func.coalesce(func.sum(InvoicePayment.amount), 0.0)).filter(
+            InvoicePayment.clinic_id == final_clinic_id,
+            InvoicePayment.paid_on >= buckets[0][1].date(),
+            InvoicePayment.paid_on < buckets[-1][2].date(),
+        ).group_by(InvoicePayment.paid_on).all()
+        revenue_series = [0.0] * len(buckets)
+        for paid_on, amount in pay_rows:
+            if paid_on is None:
+                continue
+            i = _bucket_index(buckets, datetime.combine(paid_on, datetime.min.time()))
+            if i is not None:
+                revenue_series[i] += float(amount or 0)
+        revenue_series = [round(v, 2) for v in revenue_series]
+
+    patient_times = db.query(Patient.created_at).filter(
+        Patient.clinic_id == final_clinic_id,
+        Patient.created_at >= buckets[0][1],
+        Patient.created_at < buckets[-1][2],
+    ).all()
+    patients_series = [0] * len(buckets)
+    for (created,) in patient_times:
+        i = _bucket_index(buckets, created)
+        if i is not None:
+            patients_series[i] += 1
+
+    # Existing patients who came in during the period: the other half of "how
+    # many people did we see", which the new-patient count cannot say.
+    returning = int(db.query(func.count(func.distinct(Appointment.patient_id))).join(
+        Patient, Patient.id == Appointment.patient_id,
+    ).filter(
+        Appointment.clinic_id == final_clinic_id,
+        Appointment.appointment_date >= start_date,
+        Appointment.appointment_date < min(end_date, now),
+        func.lower(func.coalesce(Appointment.status, '')) == 'completed',
+        Patient.created_at < start_date,
+    ).scalar() or 0)
+
+    # "All time" has no earlier window to compare with; period_range makes the
+    # previous window equal the current one, so every trend there is noise.
+    comparable = period != "all"
+    series_labels = [buckets[0][0], buckets[-1][0]] if buckets else None
+
     return {
+        "comparable": comparable,
+        "series_labels": series_labels,
         "total_patients": {
             "value": patients_count,
             "change": patient_change,
@@ -305,6 +378,8 @@ def get_dashboard_metrics(
             "change_type": "up" if patient_change >= 0 else "down",
             "sparkline": patients_sparkline,
             "last_30_days": patients_last_30,
+            "series": patients_series,
+            "returning": returning,
         },
         "appointments": {
             "value": appointments_count,
@@ -314,6 +389,8 @@ def get_dashboard_metrics(
             "completed": appt_completed,
             "scheduled": appt_scheduled,
             "missed": appt_missed,
+            "upcoming": appt_upcoming,
+            "unmarked": max(0, appt_scheduled - appt_upcoming),
         },
         # Deprecated — kept for the mobile home screen. See note above.
         "checking": {
@@ -332,6 +409,7 @@ def get_dashboard_metrics(
             "invoice_count": dues_count,
             "aged_amount": round(aged_amount, 2),
             "oldest_days": oldest_days,
+            "over_90_count": over_90_count,
         },
         "revenue": {
             "value": float(revenue),
@@ -340,6 +418,7 @@ def get_dashboard_metrics(
             "change_type": "up" if revenue_trend >= 0 else "down",
             "billed": round(billed, 2),
             "collected_today": round(revenue_today, 2),
+            "series": revenue_series,
         },
     }
 

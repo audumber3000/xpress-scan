@@ -2,6 +2,7 @@ import React from 'react';
 import { Wallet, Clock, CalendarClock, Banknote, TrendingUp, Receipt, Scale, Tag } from 'lucide-react';
 import KpiRow from '../common/KpiRow';
 import { formatCompactMoney, formatMoney, formatCount } from '../../utils/currency';
+import { clinicInputParts } from '../../utils/datetime';
 
 /**
  * The four storytelling KPI cards above the Payments table.
@@ -38,6 +39,9 @@ const changePill = (metric, cmpLabel, fmt) => {
   return {
     change: metric.change,
     changeType: metric.change_type,
+    // With the base, a move from nothing reads "+₹600" rather than "100%".
+    previous: metric.previous,
+    value: metric.current,
     changeLabel: `${fmt(metric.current)} ${now} vs ${fmt(metric.previous)} ${before}`,
   };
 };
@@ -45,7 +49,8 @@ const changePill = (metric, cmpLabel, fmt) => {
 /** All-payments tab: where the money is, and where it's stuck. */
 function paymentsCards(s) {
   const billed = s.billed || 0;
-  const collected = s.collected || 0;
+  // Collected over the same invoices `billed` counts; older backends lack it.
+  const collected = s.collected_issued ?? s.collected ?? 0;
   const out = s.outstanding || {};
   const plans = s.plans || {};
   const methods = s.methods || {};
@@ -53,6 +58,16 @@ function paymentsCards(s) {
 
   const collectionRate = pct(collected, billed);
   const agedPct = pct(out.aged_amount, out.amount);
+  const toCollect = Math.max(0, billed - collected);
+
+  const planTotal = (plans.paid_total || 0) + (plans.due_total || 0);
+  const planPaidPct = pct(plans.paid_total || 0, planTotal);
+
+  const methodRows = (methods.breakdown || []).filter((m) => m.amount > 0);
+  const viaMethods = methodRows.reduce((t, m) => t + m.amount, 0);
+  const top = methodRows[0];
+  const topShare = top ? pct(top.amount, viaMethods) : 0;
+  const METHOD_COLORS = ['#2a276e', '#9B8CFF', '#c9c3f5'];
 
   return [
     {
@@ -64,89 +79,123 @@ function paymentsCards(s) {
       icon: ico(Wallet),
       variant: 'meter',
       story: billed > 0
-        ? `Of ${formatMoney(billed)} billed. The rest is either owed or never issued.`
+        ? `Of ${formatMoney(billed)} billed.`
         : 'Nothing has been billed in this selection.',
       storyShort: billed > 0 ? `of ${formatCompactMoney(billed)} billed` : 'Nothing billed',
       meterPercent: collectionRate,
-      meterLeft: billed > 0 ? `${collectionRate}% collection rate` : '',
-      meterRight: plans.payments_total
-        ? `${formatCount(plans.payments_total)} payments`
-        : '',
+      meterLeft: billed > 0 ? `${collectionRate}% collected` : '',
+      meterRight: toCollect > 0 ? `${formatCompactMoney(toCollect)} still to collect` : '',
     },
     {
       key: 'outstanding',
       isMoney: true,
       title: 'Outstanding',
       display: formatCompactMoney(out.amount),
-      ...changePill(cmp.outstanding, cmp.label, formatCompactMoney),
-      // Money owed going up is bad news, so the pill has to invert.
+      // No trend pill: the old one compared unpaid on invoices *created* this
+      // month with last month's, which is not a change in what is owed.
       invert: true,
+      badge: out.over_90_count > 0 ? `${formatCount(out.over_90_count)} over 90 days` : null,
+      badgeTone: 'bad',
       icon: ico(Clock),
       variant: 'meter',
       story: out.invoices > 0
-        ? `${formatCount(out.patients)} ${out.patients === 1 ? 'patient owes' : 'patients owe'} you. Oldest bill is ${out.oldest_days} days old.`
+        ? `${formatCount(out.patients)} ${out.patients === 1 ? 'patient owes' : 'patients owe'} you, on ${formatCount(out.invoices)} ${out.invoices === 1 ? 'bill' : 'bills'}.`
         : 'Nothing outstanding. Every issued invoice is settled.',
       storyShort: out.invoices > 0 ? `${formatCount(out.patients)} patients` : 'All settled',
       meterPercent: agedPct,
       meterTone: 'warn',
-      meterLeft: out.invoices > 0 ? `${agedPct}% aged 30d+` : '',
-      meterRight: out.invoices > 0
-        ? `${formatCount(out.invoices)} ${out.invoices === 1 ? 'invoice' : 'invoices'}`
-        : '',
+      meterLeft: out.invoices > 0 ? `${agedPct}% older than 30 days` : '',
+      meterRight: out.oldest_days > 0 ? `oldest ${out.oldest_days}d` : '',
     },
     {
       key: 'plans',
       title: 'On payment plans',
       display: formatCount(plans.open || 0),
-      // More bills going onto instalments is not obviously good or bad, so this
-      // one stays uninverted and is read as a fact rather than a score.
       ...changePill(cmp.plans, cmp.label, formatCount),
       icon: ico(CalendarClock),
-      variant: 'spark',
-      // The sparkline is the distribution of plan lengths, not a time series —
-      // tallest bar = the most common number of instalments.
-      sparkline: (plans.histogram || []).map((h) => h.invoices),
-      // A distribution, not a time series: highlight the most common plan
-      // length rather than the rightmost bar, which is the rarest case.
-      sparklineHighlight: 'max',
+      // How far through their bills the open plans are, in money. It used to
+      // be bars of how many payments *every* paid invoice took, where "paid in
+      // one go" dwarfed the actual plans.
+      variant: plans.open > 0 && planTotal > 0 ? 'meter' : 'plain',
+      meterPercent: planPaidPct,
+      meterLeft: planTotal > 0 ? `${planPaidPct}% paid so far` : '',
+      meterRight: plans.due_total > 0 ? `${formatCompactMoney(plans.due_total)} left` : '',
       story: plans.open > 0
-        ? `Bills mid-instalment. A typical plan here runs ${plans.median_length} ${plans.median_length === 1 ? 'payment' : 'payments'}.`
+        ? `${formatCount(plans.patients || plans.open)} ${(plans.patients || plans.open) === 1 ? 'patient is' : 'patients are'} paying in parts${plans.plan_median >= 2 ? `, usually over ${plans.plan_median} payments` : ''}.`
         : 'No invoice is part-way through a payment plan.',
-      storyShort: plans.open > 0 ? `typically ${plans.median_length} payments` : 'None open',
+      storyShort: plans.open > 0 ? `${formatCompactMoney(plans.due_total || 0)} left` : 'None open',
     },
     {
       key: 'methods',
-      isMoney: true,
       title: 'How money arrives',
-      display: `${methods.cash_share || 0}%`,
+      // The top method and its share, e.g. "UPI 62%". It used to be the cash
+      // share with rows that restated cash vs digital.
+      display: top ? `${top.method} ${topShare}%` : '—',
       icon: ico(Banknote),
-      variant: 'breakdown',
-      story: methods.cash_share >= 70
-        ? 'Almost everything is cash. Worth knowing before you reconcile.'
-        : methods.cash_share <= 30
-          ? 'Mostly digital, so most of it reconciles itself.'
-          : 'A roughly even split between cash and digital.',
-      storyShort: 'cash share',
-      rows: [
-        { label: 'Cash', value: formatCompactMoney(methods.cash), color: '#2a276e' },
-        { label: 'Digital', value: formatCompactMoney(methods.digital), color: '#9B8CFF' },
-      ],
+      variant: methodRows.length > 0 ? 'breakdown' : 'plain',
+      rows: methodRows.slice(0, 3).map((m, i) => ({
+        label: m.method,
+        hint: `${formatCount(m.count)}×`,
+        value: formatCompactMoney(m.amount),
+        color: METHOD_COLORS[i],
+      })),
+      story: methodRows.length === 0
+        ? 'No payments recorded in this selection.'
+        : methods.cash_share >= 70
+          ? 'Mostly cash. Worth knowing before you reconcile.'
+          : methods.cash_share <= 30
+            ? 'Mostly digital, so most of it reconciles itself.'
+            : 'A mix of cash and digital.',
+      storyShort: top ? `${formatCompactMoney(top.amount)} by ${top.method}` : 'No payments',
     },
   ];
 }
 
+/** Payments per clinic-local hour, for the Today bars. */
+const hourly = (entries) => {
+  const hours = (entries || [])
+    .map((e) => {
+      const t = clinicInputParts(e.created_at).time;
+      return t ? { h: Number(t.slice(0, 2)), amount: Number(e.amount) || 0 } : null;
+    })
+    .filter(Boolean);
+  if (hours.length === 0) return null;
+  // Clinic hours by default, stretched to fit anything outside them.
+  const from = Math.min(9, ...hours.map((x) => x.h));
+  const to = Math.max(20, ...hours.map((x) => x.h));
+  const series = Array.from({ length: to - from + 1 }, () => 0);
+  hours.forEach(({ h, amount }) => { series[h - from] += amount; });
+  const fmt = (h) => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
+  const peak = series.indexOf(Math.max(...series));
+  return { series, labels: [fmt(from), fmt(to)], peak: fmt(from + peak) };
+};
+
 /** Today's collection tab: what came in on the selected day, and how. */
-function todayCards(s, prev) {
+function todayCards(s, prev, entries) {
   const total = s.todayRevenue || 0;
   const cash = s.todayCash || 0;
   const online = s.todayOnline || 0;
+  const count = s.todayCount || 0;
   const cashShare = pct(cash, total);
+  const hours = hourly(entries);
 
+  // Against the same weekday last week. When last week was nothing there is
+  // no percentage to give, and "no change" would be wrong: say it is new.
   const delta = (cur, before) => {
-    if (!before || before === 0) return { change: 0, changeType: 'up' };
+    if (before === undefined || before === null) return {};
+    if (!before) return cur > 0 ? { badge: 'new vs last week', badgeTone: 'good' } : {};
     const c = Math.round(((cur - before) / before) * 1000) / 10;
-    return { change: Math.abs(c), changeType: c >= 0 ? 'up' : 'down' };
+    return { change: Math.abs(c), changeType: c >= 0 ? 'up' : 'down', changeLabel: `${formatCompactMoney(cur)} vs ${formatCompactMoney(before)} same day last week` };
   };
+
+  // Digital by rail (UPI, Card, ...), from the day's own entries.
+  const rails = {};
+  (entries || []).forEach((e) => {
+    const m = (e.method || 'Other').trim();
+    if (m.toLowerCase() === 'cash') return;
+    rails[m] = (rails[m] || 0) + (Number(e.amount) || 0);
+  });
+  const railRows = Object.entries(rails).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
   return [
     {
@@ -156,14 +205,14 @@ function todayCards(s, prev) {
       display: formatCompactMoney(total),
       ...delta(total, prev?.total),
       icon: ico(TrendingUp),
-      variant: 'meter',
+      // When in the day the money came in.
+      variant: hours ? 'spark' : 'plain',
+      sparkline: hours?.series,
+      sparklineLabels: hours?.labels,
       story: total > 0
-        ? `${formatMoney(total)} taken across ${formatCount(s.todayCount || 0)} ${s.todayCount === 1 ? 'payment' : 'payments'}.`
+        ? `Busiest around ${hours?.peak || 'midday'}.`
         : 'Nothing collected on this day yet.',
-      storyShort: total > 0 ? `${formatCount(s.todayCount || 0)} payments` : 'Nothing yet',
-      meterPercent: cashShare,
-      meterLeft: total > 0 ? `${cashShare}% cash` : '',
-      meterRight: prev?.total ? `${formatCompactMoney(prev.total)} last week` : '',
+      storyShort: total > 0 && hours ? `peak ${hours.peak}` : 'Nothing yet',
     },
     {
       key: 'today_cash',
@@ -174,7 +223,7 @@ function todayCards(s, prev) {
       icon: ico(Banknote),
       variant: 'plain',
       story: cash > 0
-        ? `${cashShare}% of the day. This is what should be in the drawer at close.`
+        ? `${cashShare}% of the day. What should be in the drawer at close.`
         : 'No cash taken on this day.',
       storyShort: cash > 0 ? `${cashShare}% of the day` : 'None',
     },
@@ -185,24 +234,23 @@ function todayCards(s, prev) {
       display: formatCompactMoney(online),
       ...delta(online, prev?.online),
       icon: ico(Receipt),
-      variant: 'plain',
+      variant: railRows.length > 1 ? 'breakdown' : 'plain',
+      rows: railRows.map(([m, amt], i) => ({ label: m, value: formatCompactMoney(amt), color: ['#2a276e', '#9B8CFF', '#c9c3f5'][i] })),
       story: online > 0
-        ? `${100 - cashShare}% of the day, straight to the bank.`
+        ? railRows.length === 1 ? `All by ${railRows[0][0]}, straight to the bank.` : 'Straight to the bank.'
         : 'Nothing digital on this day.',
       storyShort: online > 0 ? `${100 - cashShare}% of the day` : 'None',
     },
     {
       key: 'today_receipts',
       title: 'Receipts issued',
-      display: formatCount(s.todayCount || 0),
+      display: formatCount(count),
       icon: ico(Tag),
-      variant: 'breakdown',
-      story: 'Each row on the list below is one receipt.',
-      storyShort: 'one per row below',
-      rows: [
-        { label: 'Cash', value: formatCompactMoney(cash), color: '#2a276e' },
-        { label: 'Digital', value: formatCompactMoney(online), color: '#9B8CFF' },
-      ],
+      variant: 'plain',
+      story: count > 0
+        ? `About ${formatMoney(Math.round(total / count))} per receipt.`
+        : 'No receipts on this day yet.',
+      storyShort: count > 0 ? `~${formatCompactMoney(total / count)} each` : 'None',
     },
   ];
 }
@@ -273,9 +321,9 @@ function ledgerCards(l) {
   ];
 }
 
-const PaymentKpiRow = ({ tab, summary, todayPrevious, ledgerStats, onSelect }) => {
+const PaymentKpiRow = ({ tab, summary, todayPrevious, todayEntries, ledgerStats, onSelect }) => {
   const cards =
-    tab === 'today' ? todayCards(summary || {}, todayPrevious)
+    tab === 'today' ? todayCards(summary || {}, todayPrevious, todayEntries)
       : tab === 'ledger' ? ledgerCards(ledgerStats || {})
         : paymentsCards(summary || {});
 

@@ -12,10 +12,21 @@ import { describeDelta } from '../../utils/delta';
  * this file knowing about either.
  *
  * Four variants share one shell:
- *   hero      — filled navy, the one number worth reading first
- *   spark     — 7-day shape under the value
+ *   hero      — filled navy, the one number worth reading first; carries
+ *               either bars (sparkline) or a meter, whichever it is given
+ *   spark     — the card's own metric over the card's own period
  *   meter     — a part-of-whole bar (collected-of-billed, aged-of-outstanding)
  *   breakdown — labelled rows, for a value that is really a sum of parts
+ *
+ * What the lower part may show (every card is held to this):
+ *   - a meter only where there is a real 100% and both sides count the same
+ *     thing over the same window
+ *   - bars only for this card's metric over this card's period, or a
+ *     distribution whose buckets are labelled
+ *   - rows only when they add something the headline does not already say
+ *   - captions describe the thing they sit under, never repeat the badge
+ *   - no trend pill without a real previous window (pass change: null)
+ * When nothing qualifies, show nothing: the story sentence is enough.
  *
  * Every variant carries a `story`: one plain sentence naming the figures behind
  * the headline. That sentence is the point — a number with a percentage next to
@@ -108,12 +119,14 @@ const Meter = ({ percent, hero, tone = 'primary' }) => {
   );
 };
 
+// `hint` is an optional quiet second figure on the right ("3 cases", "42%").
 const Breakdown = ({ rows }) => (
-  <div className="flex flex-col gap-1">
-    {rows.map(({ label, value, color }) => (
+  <div className="flex flex-col gap-1 mt-auto">
+    {rows.map(({ label, value, color, hint }) => (
       <div key={label} className="flex items-center gap-2 pt-1 border-t border-gray-100 text-[11px]">
         <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: color }} />
         <span className="text-gray-500 flex-1 truncate">{label}</span>
+        {hint && <span className="text-gray-400 tabular-nums">{hint}</span>}
         <span className="font-bold text-gray-800 tabular-nums">{value}</span>
       </div>
     ))}
@@ -151,6 +164,7 @@ const MetricCard = ({
   meterRight,
   sparkline,
   sparklineHighlight,
+  sparklineLabels,
   rows,
   onClick,
   // What the drawer behind this card is called. Shown on hover, so it should
@@ -210,8 +224,15 @@ const MetricCard = ({
           tallest one (the hero, which carries a meter), and without this the
           sparkline stopped halfway down and left the bottom third of the
           Patients card empty. The meter below already does the same thing. */}
-      {variant === 'spark' && sparkline?.length > 0 && (
-        <KpiSparkline data={sparkline} highlight={sparklineHighlight} className="relative mt-auto" />
+      {/* Fewer than three points is not a shape; one bar just fills the card. */}
+      {(variant === 'spark' || (hero && meterPercent == null)) && sparkline?.length >= 3 && (
+        <KpiSparkline
+          data={sparkline}
+          highlight={sparklineHighlight}
+          labels={sparklineLabels}
+          hero={hero}
+          className="relative mt-auto"
+        />
       )}
 
       {variant === 'breakdown' && rows?.length > 0 && <Breakdown rows={rows} />}

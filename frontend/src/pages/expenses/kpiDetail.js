@@ -729,6 +729,85 @@ function vendorCategoryDetail(vendors, owedBy) {
   };
 }
 
+/** What is owed, split by kind of payee. A part-of-whole, so a donut. */
+function kindsDetail(payables) {
+  const unpaid = payables.filter((r) => r.status === 'unpaid');
+  const NAMES = { lab: 'Labs', consultant: 'Consultants', bill: 'Suppliers' };
+  const byKind = new Map();
+  unpaid.forEach((r) => {
+    const label = NAMES[r.kind] || 'Other';
+    const e = byKind.get(label) || { label, total: 0, count: 0 };
+    e.total += Number(r.amount) || 0;
+    e.count += 1;
+    byKind.set(label, e);
+  });
+  const ranked = [...byKind.values()].sort((a, b) => b.total - a.total)
+    .map((e, i) => ({ ...e, color: CHART_COLORS[i % CHART_COLORS.length] }));
+  const total = sum(unpaid);
+  const top = ranked[0];
+
+  return {
+    periods: FINANCIAL_PERIODS,
+    chart: 'donut',
+    is_money: true,
+    donut_label: 'Owed',
+    narrative: ranked.length === 0
+      ? 'Nothing is owed to anyone right now.'
+      : `${formatMoney(total)} owed, ${pct(top.total, total)}% of it to ${top.label.toLowerCase()}.`,
+    insights: ranked.slice(0, 3).map((e) => ({ label: e.label, value: formatCompactMoney(e.total) })),
+    series: ranked,
+    row_label: 'Open bills',
+    rows: [...unpaid]
+      .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+      .map((r) => ({
+        id: r.id,
+        bucket: NAMES[r.kind] || 'Other',
+        title: r.payee_name || 'Unassigned',
+        subtitle: [NAMES[r.kind], r.description, r.patient_name].filter(Boolean).join(' · '),
+        amount: r.amount,
+      })),
+  };
+}
+
+/**
+ * The petty cash drawer, for all four of its cards. They had no drawer and
+ * opened onto "Couldn't load this breakdown".
+ */
+function pettyDetail(items, focus) {
+  const spends = items.filter((r) => r.kind === 'spend');
+  const tops = items.filter((r) => r.kind !== 'spend');
+  const shown = focus === 'topped' ? tops : spends;
+  const { series, bucketOf, axisLabel } = timeSeries(shown, (r) => r.occurred_on);
+  const spent = sum(spends);
+  const topped = sum(tops);
+
+  return {
+    periods: FINANCIAL_PERIODS,
+    chart: 'area',
+    is_money: true,
+    x_label: `${axisLabel} · tap a point to filter the list below`,
+    narrative: items.length === 0
+      ? 'Nothing has gone in or out of the drawer in this window.'
+      : `${formatMoney(spent)} paid out across ${formatCount(spends.length)} ${plural(spends.length, 'entry', 'entries')}, and ${formatMoney(topped)} put in.`,
+    insights: [
+      { label: 'Paid out', value: formatCompactMoney(spent) },
+      { label: 'Put in', value: formatCompactMoney(topped) },
+      { label: 'Entries', value: formatCount(items.length) },
+    ],
+    series,
+    row_label: focus === 'topped' ? 'Every top-up' : 'Every payment out',
+    rows: [...shown]
+      .sort((a, b) => String(b.occurred_on || '').localeCompare(String(a.occurred_on || '')))
+      .map((r) => ({
+        id: r.id,
+        bucket: bucketOf(r),
+        title: r.description || r.category || (r.kind === 'spend' ? 'Spend' : 'Top-up'),
+        subtitle: [r.category, r.occurred_on ? formatDate(r.occurred_on) : null].filter(Boolean).join(' · '),
+        amount: r.amount,
+      })),
+  };
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 /**
@@ -740,6 +819,7 @@ function vendorCategoryDetail(vendors, owedBy) {
  */
 export function buildExpenseKpiDetail({
   metric, period = 'all', payables = [], ledgerItems = [], vendors = [], vendorOwed = {},
+  pettyItems = [],
 }) {
   const w = windowFor(period);
   const scopedPayables = payables.filter((r) => inWindow(r.created_at, w));
@@ -763,6 +843,14 @@ export function buildExpenseKpiDetail({
     case 'lab': return kindTrendDetail(scopedPayables, 'lab', 'lab bills');
     case 'consultant': return kindTrendDetail(scopedPayables, 'consultant', 'consultant fees');
     case 'payees': return payeeDetail(scopedPayables);
+    case 'kinds': return kindsDetail(scopedPayables);
+    case 'bills': return kindTrendDetail(scopedPayables, 'bill', 'supplier bills');
+
+    // Petty cash
+    case 'balance':
+    case 'spent':
+    case 'close': return pettyDetail(pettyItems.filter((r) => inWindow(r.occurred_on, w)), 'spent');
+    case 'topped': return pettyDetail(pettyItems.filter((r) => inWindow(r.occurred_on, w)), 'topped');
 
     // Ledger
     case 'out': return flowDetail(scopedLedger, 'out');

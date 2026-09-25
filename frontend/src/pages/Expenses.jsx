@@ -356,6 +356,10 @@ const Expenses = () => {
     // rather than derived in the card so the figure and the rows it describes
     // come from the same pass over the same filtered window.
     let overdue = 0, overdueCount = 0;
+    // Unpaid for over 30 days, the same ageing line Outstanding uses on
+    // Payments and the dashboard, so the meter means the same everywhere.
+    const agedCutoff = (() => { const d = new Date(`${clinicToday()}T00:00:00`); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); })();
+    let aged = 0, oldestKey = null;
 
     payableWindow.forEach((r) => {
       const amt = Number(r.amount) || 0;
@@ -363,6 +367,9 @@ const Expenses = () => {
       unpaid += amt;
       unpaidCount += 1;
       if (r.days_overdue > 0) { overdue += amt; overdueCount += 1; }
+      const key = r.created_at ? clinicDateKey(r.created_at) : null;
+      if (key && key < agedCutoff) aged += amt;
+      if (key && (!oldestKey || key < oldestKey)) oldestKey = key;
       const k = byKind[r.kind] || (byKind[r.kind] = { amount: 0, count: 0 });
       k.amount += amt;
       k.count += 1;
@@ -370,8 +377,12 @@ const Expenses = () => {
       byVendor[name] = (byVendor[name] || 0) + amt;
     });
 
+    const oldestDays = oldestKey
+      ? Math.round((new Date(`${clinicToday()}T00:00:00`) - new Date(`${oldestKey}T00:00:00`)) / 86400000)
+      : 0;
+
     return {
-      unpaid, paid, unpaidCount, byKind, overdue, overdueCount,
+      unpaid, paid, unpaidCount, byKind, overdue, overdueCount, aged, oldestDays,
       vendors: Object.entries(byVendor)
         .map(([name, amount]) => ({ name, amount }))
         .sort((a, b) => b.amount - a.amount),
@@ -422,11 +433,19 @@ const Expenses = () => {
 
     let inflow = 0, outflow = 0, expensesCount = 0;
     const byCategory = {};
+    // Spend per week over the last eight weeks, oldest first, for the bars.
+    const weekly = Array(8).fill(0);
+    const todayMs = new Date(`${clinicToday()}T00:00:00`).getTime();
     scoped.forEach((item) => {
       const amt = Number(item.amount) || 0;
       if (item.type === 'expense') {
         outflow += amt;
         expensesCount += 1;
+        const key = item.date ? clinicDateKey(item.date) : null;
+        if (key) {
+          const wk = Math.floor((todayMs - new Date(`${key}T00:00:00`).getTime()) / (7 * 86400000));
+          if (wk >= 0 && wk < 8) weekly[7 - wk] += amt;
+        }
         const cat = item.category || 'Uncategorised';
         byCategory[cat] = (byCategory[cat] || 0) + amt;
       } else {
@@ -437,7 +456,7 @@ const Expenses = () => {
       .map(([category, amount]) => ({ category, amount }))
       .sort((a, b) => b.amount - a.amount);
 
-    return { inflow, outflow, expensesCount, categories, topCategory: categories[0]?.category || null };
+    return { inflow, outflow, expensesCount, categories, topCategory: categories[0]?.category || null, weekly };
   }, [ledgerScope]);
 
   // ── Vendors: window, rows, figures ─────────────────────────────────────────
@@ -501,9 +520,10 @@ const Expenses = () => {
         ledgerItems: ledgerScope,
         vendors,
         vendorOwed,
+        pettyItems: petty.items || [],
       })
       : undefined
-  ), [selectedKpi, kpiPeriod, payableWindow, ledgerScope, vendors, vendorOwed]);
+  ), [selectedKpi, kpiPeriod, payableWindow, ledgerScope, vendors, vendorOwed, petty.items]);
 
   // ── Petty cash: rows and figures ───────────────────────────────────────────
 

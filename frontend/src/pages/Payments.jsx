@@ -221,6 +221,8 @@ const Payments = () => {
         todayRevenue: res?.total || 0,
         todayCash: res?.cash || 0,
         todayOnline: res?.online || 0,
+        // Was never copied into state, so "Receipts issued" always read 0.
+        todayCount: res?.count ?? (res?.entries || []).length,
       }));
       // Same weekday last week, for the change pills on the cards.
       setTodayPrevious(res?.previous || null);
@@ -503,6 +505,7 @@ const Payments = () => {
           tab={activeTab}
           summary={stats}
           todayPrevious={todayPrevious}
+          todayEntries={todayCollections}
           ledgerStats={ledgerStats}
           onSelect={activeTab === 'payments' ? setSelectedKpi : undefined}
         />
