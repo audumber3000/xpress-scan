@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { CLINICAL_ROLES } from '../../utils/roles';
 import { useNavigate } from "react-router-dom";
 import { notify } from '../../utils/notify';
 import { Search, Trash2, FileText, Receipt, Pencil, Download } from "lucide-react";
@@ -64,7 +65,9 @@ const DailyRegisterTab = ({ onRegisterNew, refreshKey = 0 }) => {
 
   useEffect(() => {
     api.get("/clinic-users")
-      .then((res) => setDoctors((res || []).filter(u => u.role === "doctor" || u.role === "clinic_owner")))
+      // Every clinical role, not just "doctor": in-house doctors, associates
+      // and consultants were missing from the picker (seen at clinic 286).
+      .then((res) => setDoctors((res || []).filter(u => CLINICAL_ROLES.includes(u.role))))
       .catch(() => setDoctors([]));
   }, []);
 
