@@ -1,6 +1,7 @@
 import React from 'react';
 import { Package, AlertTriangle, RefreshCw, Wallet } from 'lucide-react';
 import KpiRow from '../common/KpiRow';
+import { invItems, invAttention, invUsed, invValue } from '../../assets/kpi';
 import { formatCompactMoney, formatCount } from '../../utils/currency';
 
 /**
@@ -31,6 +32,7 @@ export function buildInventoryCards(s) {
     {
       key: 'items',
       title: 'Items tracked',
+      image: invItems,
       display: formatCount(items.total || 0),
       icon: ico(Package),
       variant: 'breakdown',
@@ -47,6 +49,7 @@ export function buildInventoryCards(s) {
     {
       key: 'attention',
       title: 'Needs attention',
+      image: invAttention,
       display: formatCount(flagged),
       icon: ico(AlertTriangle),
       // Three separate reasons, each a count you can act on. It used to be a
@@ -72,6 +75,7 @@ export function buildInventoryCards(s) {
     {
       key: 'movement',
       title: 'Used',
+      image: invUsed,
       // Items used, not in and out added together.
       display: formatCount(mov.out || 0),
       icon: ico(RefreshCw),
@@ -89,6 +93,7 @@ export function buildInventoryCards(s) {
     cards.push({
       key: 'value',
       title: 'Stock value',
+      image: invValue,
       display: formatCompactMoney(setup.priced_value),
       isMoney: true,
       icon: ico(Wallet),

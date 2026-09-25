@@ -1,6 +1,7 @@
 import React from 'react';
 import { FlaskConical, Timer, Receipt, Factory } from 'lucide-react';
 import KpiRow from '../common/KpiRow';
+import { labOpen, labTurnaround, labSpend, labByLab } from '../../assets/kpi';
 import { formatCompactMoney, formatCount } from '../../utils/currency';
 
 /**
@@ -37,6 +38,7 @@ export function buildLabCards(s) {
     {
       key: 'open',
       title: 'Open cases',
+      image: labOpen,
       display: formatCount(open.count || 0),
       icon: ico(FlaskConical),
       variant: open.count > 0 ? 'meter' : 'plain',
@@ -59,6 +61,7 @@ export function buildLabCards(s) {
     {
       key: 'turnaround',
       title: 'Turnaround',
+      image: labTurnaround,
       display: tat.completed > 0 ? `${tat.median_days}d` : '—',
       icon: ico(Timer),
       variant: tatRows.length ? 'breakdown' : 'plain',
@@ -78,6 +81,7 @@ export function buildLabCards(s) {
     {
       key: 'spend',
       title: 'Lab spend',
+      image: labSpend,
       display: formatCompactMoney(spend.total),
       isMoney: true,
       icon: ico(Receipt),
@@ -101,6 +105,7 @@ export function buildLabCards(s) {
     cards.push({
       key: 'vendors',
       title: 'By lab',
+      image: labByLab,
       // The lab itself, not a count of labs.
       display: vendors[0].vendor,
       icon: ico(Factory),

@@ -126,7 +126,7 @@ const Meter = ({ percent, hero, tone = 'primary' }) => {
 const CompactBreakdown = ({ rows }) => (
   // Two per line only where the card is wide enough for the labels; on a
   // narrow card they stack rather than truncate to "Upc…".
-  <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-3 gap-y-1 mt-auto pt-1.5 border-t border-gray-100">
+  <div className="relative grid grid-cols-1 xl:grid-cols-2 gap-x-3 gap-y-1 mt-auto pt-1.5 border-t border-gray-100">
     {rows.map(({ label, value, color }) => (
       <div key={label} className="flex items-center gap-1.5 text-[11px] min-w-0">
         <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: color }} />
@@ -138,7 +138,7 @@ const CompactBreakdown = ({ rows }) => (
 );
 
 const Breakdown = ({ rows }) => (
-  <div className="flex flex-col gap-1 mt-auto">
+  <div className="relative flex flex-col gap-1 mt-auto">
     {rows.map(({ label, value, color, hint }) => (
       <div key={label} className="flex items-center gap-2 pt-1 border-t border-gray-100 text-[11px]">
         <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: color }} />
@@ -149,6 +149,19 @@ const Breakdown = ({ rows }) => (
     ))}
   </div>
 );
+
+// Fades the photo out toward the left (into the headline) and toward the
+// bottom (under the rows and bars), so the text always sits on white.
+const PHOTO_FADE = {
+  WebkitMaskImage:
+    'linear-gradient(to left, rgba(0,0,0,.95) 0%, rgba(0,0,0,.55) 40%, transparent 100%),' +
+    'linear-gradient(to bottom, #000 0%, #000 45%, transparent 92%)',
+  maskImage:
+    'linear-gradient(to left, rgba(0,0,0,.95) 0%, rgba(0,0,0,.55) 40%, transparent 100%),' +
+    'linear-gradient(to bottom, #000 0%, #000 45%, transparent 92%)',
+  WebkitMaskComposite: 'source-in',
+  maskComposite: 'intersect',
+};
 
 const MetricCard = ({
   title,
@@ -188,6 +201,8 @@ const MetricCard = ({
   // What the drawer behind this card is called. Shown on hover, so it should
   // finish the sentence "…" rather than repeat the card's own title.
   actionLabel = 'See the breakdown',
+  // A photo on the right that fades out toward the text. Decorative only.
+  image,
   className = '',
 }) => {
   const hero = variant === 'hero';
@@ -204,6 +219,19 @@ const MetricCard = ({
           : `bg-white border-gray-200 ${onClick ? 'hover:border-[#2a276e]/35' : ''}`
       } ${className}`}
     >
+      {image && !hero && (
+        <img
+          src={image}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          // Narrower and lighter where the card is narrow, so a wrapped
+          // sentence never runs across the photo; off on phones.
+          className="pointer-events-none select-none absolute top-0 right-0 h-full hidden md:block w-[34%] opacity-70 xl:w-[48%] xl:opacity-100 object-cover"
+          style={PHOTO_FADE}
+        />
+      )}
+
       {/* Soft highlight so the filled card has some depth without a shadow. */}
       {hero && (
         <span
