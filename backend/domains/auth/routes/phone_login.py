@@ -264,6 +264,12 @@ def redeem_code(
     device_data = dict(payload.device or {})
     device_data.setdefault("device_type", "mobile")
     device_data.setdefault("device_name", "Mobile App")
+    # Apps before the install id sent no serial, so the server named the device
+    # after the user-agent hash, which every phone running the app shares:
+    # every phone on one account became one device, and "Not them?" or a block
+    # under Devices signed all of them out. One QR sign-in is one phone.
+    if not device_data.get("device_serial"):
+        device_data["device_serial"] = f"qr_{row.id}"
     device_info = auth_service.detect_device_info(request, device_data)
     device = auth_service.register_device(user.id, device_info)
     blocked = auth_service.device_block_reason(device, device_info["device_type"])

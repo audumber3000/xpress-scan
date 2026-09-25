@@ -219,13 +219,30 @@ def test_blocking_signs_that_phone_out_at_once(client, auth_headers, db_session)
 
 
 def test_a_blocked_phone_cannot_scan_back_in(client, auth_headers, monkeypatch):
+    # The app sends its install id, so the same phone is the same device.
     import domains.auth.routes.phone_login as pl
+    phone = {**PHONE, "device_serial": "app_install_1"}
     code_id = _issue(client, auth_headers).json()["id"]
-    _redeem(client)
+    _redeem(client, device=phone)
     client.post(f"/api/v1/auth/phone-login/code/{code_id}/block", headers=auth_headers)
     monkeypatch.setattr(pl.secrets, "token_urlsafe", lambda n=32: CODE + "3")
     _issue(client, auth_headers)
-    assert _redeem(client, text=QR_TEXT + "3").status_code == 403
+    assert _redeem(client, text=QR_TEXT + "3", device=phone).status_code == 403
+
+
+def test_blocking_one_phone_leaves_the_others_signed_in(client, auth_headers, monkeypatch):
+    # Old apps send no serial, and the user-agent every phone shares used to
+    # make them all one device, so blocking one signed out every phone.
+    import domains.auth.routes.phone_login as pl
+    first_id = _issue(client, auth_headers).json()["id"]
+    first = {"Authorization": f"Bearer {_redeem(client).json()['token']}"}
+    monkeypatch.setattr(pl.secrets, "token_urlsafe", lambda n=32: CODE + "2")
+    _issue(client, auth_headers)
+    second = {"Authorization": f"Bearer {_redeem(client, text=QR_TEXT + '2').json()['token']}"}
+
+    client.post(f"/api/v1/auth/phone-login/code/{first_id}/block", headers=auth_headers)
+    assert client.get("/api/v1/auth/me", headers=first).status_code == 401
+    assert client.get("/api/v1/auth/me", headers=second).status_code == 200
 
 
 def test_nothing_to_block_before_a_scan(client, auth_headers):
