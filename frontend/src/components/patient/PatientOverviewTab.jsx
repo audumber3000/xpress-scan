@@ -40,6 +40,7 @@ const PatientOverviewTab = ({
   onNewInvoice,
   onNewPrescription,
   onOpenPrescription,
+  onDeletePrescription,
 }) => {
   // Which record THIS patient's file keeps: their own setting when they have
   // one, the clinic's otherwise. A general clinic was being shown a tooth chart
@@ -150,6 +151,7 @@ const PatientOverviewTab = ({
             prescriptions={prescriptions}
             onNew={onNewPrescription}
             onOpen={onOpenPrescription}
+            onDelete={onDeletePrescription}
             className="flex-none"
           />
         </div>

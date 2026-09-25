@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, FileText, Download } from 'lucide-react';
+import { Plus, FileText, Download, Pencil, Trash2 } from 'lucide-react';
 import OverviewCard, { OverviewEmpty } from './OverviewCard';
 import { formatDate } from '../../../utils/datetime';
 
@@ -11,7 +11,7 @@ import { formatDate } from '../../../utils/datetime';
  * happen here: the list is real data and the button opens the same
  * PrescriptionDrawer the Prescriptions tab uses. One drawer, one code path.
  */
-const PrescriptionsCard = ({ prescriptions = [], onNew, onOpen, onDownload, className = '' }) => {
+const PrescriptionsCard = ({ prescriptions = [], onNew, onOpen, onDelete, onDownload, className = '' }) => {
   const recent = [...prescriptions]
     .sort((a, b) => new Date(b.issued_on || b.created_at || b.date || 0) - new Date(a.issued_on || a.created_at || a.date || 0))
     .slice(0, 3);
@@ -46,6 +46,28 @@ const PrescriptionsCard = ({ prescriptions = [], onNew, onOpen, onDownload, clas
                   {summary || `${items.length || 0} item${items.length === 1 ? '' : 's'}`}
                 </p>
               </button>
+              {onOpen && (
+                <button
+                  type="button"
+                  onClick={() => onOpen(rx)}
+                  title="Edit prescription"
+                  aria-label={`Edit the prescription from ${formatDate(rx.issued_on || rx.created_at || rx.date)}`}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-[#2a276e] hover:bg-gray-50 transition-colors flex-shrink-0"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={() => onDelete(rx)}
+                  title="Delete prescription"
+                  aria-label={`Delete the prescription from ${formatDate(rx.issued_on || rx.created_at || rx.date)}`}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
               {rx.pdf_url && (
                 <a
                   href={rx.pdf_url}

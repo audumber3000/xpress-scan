@@ -35,6 +35,9 @@ const CaseWorkPanel = ({
   selectedCasePaper,
   isNewCasePaper,
   onNewPrescription,
+  onEditPrescription,
+  onDeletePrescription,
+  onDeleteMedicine,
   // Documents
   patientDocuments = [],
   onUploadClick,
@@ -128,7 +131,14 @@ const CaseWorkPanel = ({
 
         <div key={active} className="flex-1 p-3 animate-view-fade-in">
           {active === 'lab' && <LabOrdersTab labOrders={labOrders} onEditLabOrder={onEditLabOrder} />}
-          {active === 'rx' && <PrescriptionsTab prescriptions={prescriptions} />}
+          {active === 'rx' && (
+            <PrescriptionsTab
+              prescriptions={prescriptions}
+              onEdit={onEditPrescription}
+              onDelete={onDeletePrescription}
+              onDeleteMedicine={onDeleteMedicine}
+            />
+          )}
           {active === 'docs' && <DocumentsTab documents={patientDocuments} onUploadClick={onUploadClick} />}
           {active === 'stock' && (
             <InventoryUsedSection

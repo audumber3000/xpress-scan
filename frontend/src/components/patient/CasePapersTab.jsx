@@ -8,6 +8,7 @@ import CasePaperList from './CasePaperList';
 import ClinicalExamSection from './ClinicalExamSection';
 import DentalChartSection from './DentalChartSection';
 import CaseWorkPanel from './caseWork';
+import ConfirmDialog from '../common/ConfirmDialog';
 import ClinicalSummaryModal from './ClinicalSummaryModal';
 import CasePaperActionBar from './CasePaperActionBar';
 import CasePaperDateField from './CasePaperDateField';
@@ -76,6 +77,12 @@ const CasePapersTab = ({
   
   // Drawer States
   const [prescriptionOpen, setPrescriptionOpen] = useState(false);
+  // The prescription the drawer is editing when one was picked from the list;
+  // null means the drawer's usual "this paper's latest" behaviour.
+  const [editingRx, setEditingRx] = useState(null);
+  // A pending delete: { kind: 'rx' | 'med', rx, index?, lastOne? }.
+  const [rxConfirm, setRxConfirm] = useState(null);
+  const [rxBusy, setRxBusy] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   
   // Clinical Session State (Isolated per Case Paper)
@@ -255,6 +262,37 @@ const CasePapersTab = ({
         setVisitPrescriptions(Array.isArray(data) ? data : []);
     } catch (err) {
         console.error("Failed to fetch prescriptions:", err);
+    }
+  };
+
+  // Removing one medicine rewrites its prescription without it. The last one
+  // goes by deleting the whole prescription, so no empty prescription is left.
+  const askDeleteMedicine = (rx, index) => {
+    const named = (rx.items || []).filter((i) => (i?.medicine_name || '').trim());
+    setRxConfirm(named.length <= 1 ? { kind: 'rx', rx, lastOne: true } : { kind: 'med', rx, index });
+  };
+
+  const confirmRxDelete = async () => {
+    const c = rxConfirm;
+    if (!c || rxBusy) return;
+    setRxBusy(true);
+    try {
+      if (c.kind === 'rx') {
+        await api.delete(`/clinical/prescriptions/${c.rx.id}`);
+      } else {
+        await api.put(`/clinical/prescriptions/${c.rx.id}`, {
+          items: (c.rx.items || []).filter((_, i) => i !== c.index),
+          notes: c.rx.notes || '',
+          patient_id: patientData.id,
+        });
+      }
+      notify.done(c.kind === 'rx' ? 'Prescription deleted' : 'Medicine removed');
+      setRxConfirm(null);
+      await fetchVisitPrescriptions();
+    } catch (err) {
+      notify.problem(err, c.kind === 'rx' ? 'Could not delete the prescription' : 'Could not remove the medicine');
+    } finally {
+      setRxBusy(false);
     }
   };
 
@@ -1241,7 +1279,10 @@ const CasePapersTab = ({
           visitPrescriptions={visitPrescriptions}
           selectedCasePaper={selectedCasePaper}
           isNewCasePaper={selectedCasePaper?.isNew}
-          onNewPrescription={() => handleAutoSaveForDrawer(() => setPrescriptionOpen(true))}
+          onNewPrescription={() => handleAutoSaveForDrawer(() => { setEditingRx(null); setPrescriptionOpen(true); })}
+          onEditPrescription={(rx) => { setEditingRx(rx); setPrescriptionOpen(true); }}
+          onDeletePrescription={(rx) => setRxConfirm({ kind: 'rx', rx })}
+          onDeleteMedicine={askDeleteMedicine}
           patientDocuments={patientDocuments}
           onUploadClick={() => handleAutoSaveForDrawer(() => setScanOpen(true))}
           consumptions={inventoryConsumptions}
@@ -1329,13 +1370,13 @@ const CasePapersTab = ({
 
       <PrescriptionDrawer 
           isOpen={prescriptionOpen}
-          onClose={() => setPrescriptionOpen(false)}
+          onClose={() => { setPrescriptionOpen(false); setEditingRx(null); }}
           patientId={patientData?.id}
           patientData={patientData}
           casePaperId={selectedCasePaper?.isNew ? null : selectedCasePaper?.id}
-          initialData={casePaperPrescriptions.length > 0
+          initialData={editingRx || (casePaperPrescriptions.length > 0
             ? casePaperPrescriptions[casePaperPrescriptions.length - 1]
-            : null}
+            : null)}
           onSave={async (data) => {
               try {
                   if (selectedCasePaper?.isNew) {
@@ -1343,9 +1384,9 @@ const CasePapersTab = ({
                       return;
                   }
                   const { dispenses = [], ...rxData } = data;
-                  const existingRx = casePaperPrescriptions.length > 0
+                  const existingRx = editingRx || (casePaperPrescriptions.length > 0
                     ? casePaperPrescriptions[casePaperPrescriptions.length - 1]
-                    : null;
+                    : null);
                   if (existingRx?.id) {
                       await api.put(`/clinical/prescriptions/${existingRx.id}`, {
                           ...rxData,
@@ -1358,6 +1399,7 @@ const CasePapersTab = ({
                           case_paper_id: selectedCasePaper?.id?.toString().startsWith('new-') ? null : selectedCasePaper?.id
                       });
                   }
+                  setEditingRx(null);
                   await fetchVisitPrescriptions();
                   // Deduct any medicines the doctor chose to dispense from stock.
                   for (const d of dispenses) {
@@ -1370,6 +1412,26 @@ const CasePapersTab = ({
           }}
       />
       
+      <ConfirmDialog
+          open={!!rxConfirm}
+          onClose={() => !rxBusy && setRxConfirm(null)}
+          tone="danger"
+          title={rxConfirm?.kind === 'med'
+            ? `Remove ${rxConfirm?.rx?.items?.[rxConfirm.index]?.medicine_name || 'this medicine'}?`
+            : 'Delete this prescription?'}
+          message={rxConfirm?.kind === 'med'
+            ? 'It comes off this prescription. The rest of the prescription stays as it is.'
+            : rxConfirm?.lastOne
+              ? "It's the only medicine on this prescription, so the whole prescription will be deleted."
+              : 'Every medicine on it will be removed from the patient file.'}
+          actions={[{
+            label: rxBusy ? 'Deleting…' : (rxConfirm?.kind === 'med' ? 'Remove medicine' : 'Delete prescription'),
+            variant: 'danger',
+            disabled: rxBusy,
+            onClick: confirmRxDelete,
+          }]}
+      />
+
       <ScanUploadDrawer 
           isOpen={scanOpen}
           onClose={() => setScanOpen(false)}

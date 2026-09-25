@@ -17,6 +17,7 @@ import PatientFileHeader from "../components/patient/PatientFileHeader";
 import BookingModal from "./appointments/components/BookingModal";
 import useClinicSchedule from "./appointments/hooks/useClinicSchedule";
 import PrescriptionDrawer from "../components/patient/PrescriptionDrawer";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 import ScanUploadDrawer from "../components/patient/ScanUploadDrawer";
 import InvoiceEditor from "../components/payments/InvoiceEditor";
 import PickInvoiceModal from "../components/patient/billing/PickInvoiceModal";
@@ -62,6 +63,8 @@ const PatientProfile = () => {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [rxOpen, setRxOpen] = useState(false);
   const [rxEditing, setRxEditing] = useState(null);
+  const [rxDeleting, setRxDeleting] = useState(null);
+  const [rxDeleteBusy, setRxDeleteBusy] = useState(false);
   const [uploadKind, setUploadKind] = useState(null);
   // 'new' for a blank bill, or an invoice id to open that one. It used to be a
   // boolean, which meant the only thing the overview could do with money was
@@ -207,6 +210,21 @@ const PatientProfile = () => {
       // rather than closing on a failure and taking the prescription with it.
       notify.problem(err?.message || 'Could not save that prescription');
       throw err;
+    }
+  };
+
+  const deletePrescription = async () => {
+    if (!rxDeleting || rxDeleteBusy) return;
+    setRxDeleteBusy(true);
+    try {
+      await api.delete(`/clinical/prescriptions/${rxDeleting.id}`);
+      notify.done('Prescription deleted');
+      setRxDeleting(null);
+      await loadPrescriptions();
+    } catch (err) {
+      notify.problem(err, 'Could not delete the prescription');
+    } finally {
+      setRxDeleteBusy(false);
     }
   };
 
@@ -704,6 +722,7 @@ const PatientProfile = () => {
                 onNewInvoice={() => setInvoiceOpenId('new')}
                 onNewPrescription={() => { setRxEditing(null); setRxOpen(true); }}
                 onOpenPrescription={(rx) => { setRxEditing(rx); setRxOpen(true); }}
+                onDeletePrescription={(rx) => setRxDeleting(rx)}
                 onQuickAction={(key) => {
                   // Every tile does the thing rather than pointing at the tab
                   // that could. The three that open a drawer do it here; the
@@ -825,6 +844,20 @@ const PatientProfile = () => {
         doctors={doctors || []}
         treatments={treatmentTypes || []}
         chairCount={dayShape?.chairs || 1}
+      />
+
+      <ConfirmDialog
+        open={!!rxDeleting}
+        onClose={() => !rxDeleteBusy && setRxDeleting(null)}
+        tone="danger"
+        title="Delete this prescription?"
+        message="Every medicine on it will be removed from the patient file. To drop just one medicine, edit the prescription instead."
+        actions={[{
+          label: rxDeleteBusy ? 'Deleting…' : 'Delete prescription',
+          variant: 'danger',
+          disabled: rxDeleteBusy,
+          onClick: deletePrescription,
+        }]}
       />
 
       <PrescriptionDrawer
