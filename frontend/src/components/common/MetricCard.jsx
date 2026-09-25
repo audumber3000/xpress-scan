@@ -150,17 +150,11 @@ const Breakdown = ({ rows }) => (
   </div>
 );
 
-// Fades the photo out toward the left (into the headline) and toward the
-// bottom (under the rows and bars), so the text always sits on white.
+// The photo runs the card's full height and fades only toward the left, into
+// the headline. A bottom fade read as a photo cut off by a white band.
 const PHOTO_FADE = {
-  WebkitMaskImage:
-    'linear-gradient(to left, rgba(0,0,0,.95) 0%, rgba(0,0,0,.55) 40%, transparent 100%),' +
-    'linear-gradient(to bottom, #000 0%, #000 45%, transparent 92%)',
-  maskImage:
-    'linear-gradient(to left, rgba(0,0,0,.95) 0%, rgba(0,0,0,.55) 40%, transparent 100%),' +
-    'linear-gradient(to bottom, #000 0%, #000 45%, transparent 92%)',
-  WebkitMaskComposite: 'source-in',
-  maskComposite: 'intersect',
+  WebkitMaskImage: 'linear-gradient(to left, #000 0%, #000 30%, rgba(0,0,0,.4) 65%, transparent 100%)',
+  maskImage: 'linear-gradient(to left, #000 0%, #000 30%, rgba(0,0,0,.4) 65%, transparent 100%)',
 };
 
 const MetricCard = ({
@@ -217,7 +211,7 @@ const MetricCard = ({
         hero
           ? `bg-[#2a276e] border-[#2a276e] text-white ${onClick ? 'hover:bg-[#231f5e]' : ''}`
           : `bg-white border-gray-200 ${onClick ? 'hover:border-[#2a276e]/35' : ''}`
-      } ${className}`}
+      } ${image && !hero ? 'md:pr-[26%] xl:pr-[36%]' : ''} ${className}`}
     >
       {image && !hero && (
         <img
@@ -227,7 +221,7 @@ const MetricCard = ({
           loading="lazy"
           // Narrower and lighter where the card is narrow, so a wrapped
           // sentence never runs across the photo; off on phones.
-          className="pointer-events-none select-none absolute top-0 right-0 h-full hidden md:block w-[34%] opacity-70 xl:w-[48%] xl:opacity-100 object-cover"
+          className="pointer-events-none select-none absolute top-0 right-0 h-full hidden md:block w-[34%] opacity-80 xl:w-[46%] xl:opacity-100 object-cover"
           style={PHOTO_FADE}
         />
       )}
